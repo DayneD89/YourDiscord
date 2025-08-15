@@ -5,6 +5,13 @@ locals {
         "Newcastle",
         "Gateshead",
         "Sunderland",
+        "Durham",
+        "Darlington",
+        "Middlesbrough",
+        "Hartlepool",
+        "Stockton-on-Tees",
+        "South Shields/Tynemouth",
+        "Berwick-upon-Tweed",
         "Blyth/Ashington/Morpeth"
       ]
     }
