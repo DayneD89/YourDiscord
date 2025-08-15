@@ -1,0 +1,27 @@
+name: Deploy
+on:
+  push:
+    branches: [ main, dev ]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::811264947901:role/YourDiscord
+          aws-region: us-west-2
+
+      - name: Build
+        run: |
+          cd terraform
+          terraform init -backend-config="key=discord/${{ github.ref_name }}/terraform.tfstate"
+          terraform apply -auto-approve -var="token=${{ secrets.TOKEN }}"
