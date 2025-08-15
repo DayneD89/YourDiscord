@@ -24,4 +24,4 @@ jobs:
         run: |
           cd terraform
           terraform init -backend-config="key=discord/${{ github.ref_name }}/terraform.tfstate"
-          terraform apply -auto-approve -var="token=${{ secrets.TOKEN }}"
+          terraform apply -auto-approve -var="discord_token=${{ secrets.TOKEN }}"
