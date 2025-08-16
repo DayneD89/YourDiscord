@@ -32,18 +32,28 @@ A powerful Discord bot that enables democratic community governance through auto
 - **Bot Protection**: Prevents automation loops and unauthorized access
 
 ### 🛡️ Security Features
-- **Token Protection**: Pre-commit hooks prevent accidental Discord token commits
-- **Secret Detection**: Automated scanning for AWS credentials and API keys
-- **Secure Storage**: Environment variable management with comprehensive .gitignore
-- **CI/CD Security**: Automated security scans on every commit and PR
+- **Pre-commit Security Hooks**: Prevent Discord tokens, AWS credentials, and secrets from being committed
+- **Automated Security Scanning**: GitHub Actions workflows scan for vulnerabilities on every commit
+- **Documentation Exclusions**: Smart filtering excludes security pattern documentation from scans
+- **Secure Secret Management**: Environment variables and GitHub Secrets for sensitive data
+- **Private Key Detection**: Automated detection of SSH and API keys before commits
 
 ### 🏗️ Infrastructure
 - **Zero-Downtime Deployment**: Health check verified deployments with no service interruption
 - **Private Subnet Security**: Enhanced security with NAT Gateway and no direct internet access
+- **Environment Isolation**: Separate CIDR blocks for main and feature branch deployments
 - **Application Health Checks**: HTTP endpoint monitoring for deployment confidence
 - **S3 Persistence**: Durable storage for configurations and proposal data
-- **Terraform Management**: Infrastructure as Code for reliable deployments
-- **GitHub Actions**: Automated CI/CD pipeline for seamless updates
+- **Smart Terraform Wrappers**: Discord API retry logic and timeout handling for reliable deployments
+- **GitHub Actions CI/CD**: Automated testing, coverage, and deployment pipeline
+
+### 📊 Testing & Coverage
+- **Comprehensive Test Suite**: 122+ unit and integration tests with Jest framework
+- **Code Coverage Enforcement**: Strict coverage thresholds (60-95% by module)
+- **Analytics Dashboard**: Interactive coverage reports with code metrics and charts
+- **Automated Coverage Reports**: GitHub Pages deployment with visual analytics
+- **PR Coverage Comments**: Automatic coverage feedback on pull requests
+- **Untested File Detection**: Identifies source files missing test coverage
 
 ## 📁 Project Structure
 
@@ -51,16 +61,38 @@ A powerful Discord bot that enables democratic community governance through auto
 yourpartyserver/
 ├── YourBot/                    # Discord bot application
 │   ├── src/                    # Source code modules
+│   ├── tests/                  # Comprehensive test suite (122+ tests)
+│   ├── coverage/               # Generated coverage reports
 │   ├── bot.js                  # Application entry point
-│   └── package.json            # Node.js dependencies
+│   └── package.json            # Node.js dependencies with Jest configuration
 ├── terraform/                  # Infrastructure as Code
 │   ├── *.tf                    # Terraform configuration files
+│   ├── networking.tf           # VPC, subnets, NAT Gateway configuration
+│   ├── user_data_enhanced.sh.tpl # Health check enabled EC2 initialization
 │   ├── messages/               # Discord channel content templates
 │   └── images/                 # Server branding assets
-├── docs/                       # Detailed documentation
-├── scripts/                    # Setup and utility scripts
-└── .github/workflows/          # CI/CD automation
+├── docs/                       # Comprehensive documentation
+│   ├── workflows.md            # GitHub Actions workflow documentation
+│   ├── scripts.md              # Utility script documentation
+│   └── zero-downtime-deployment.md # Deployment strategy guide
+├── scripts/                    # Security and deployment utilities
+│   ├── setup-security.sh       # Pre-commit hook installation
+│   ├── terraform-wrapper.sh    # Discord API resilient Terraform wrapper
+│   └── terraform-apply-retry.sh # Retry logic for Discord timeouts
+└── .github/workflows/          # Advanced CI/CD automation
+    ├── test-and-coverage.yaml  # Testing with coverage enforcement
+    ├── security-scan.yaml      # Automated security scanning
+    └── build_infra.yaml        # Zero-downtime deployment pipeline
 ```
+
+### 📊 Coverage Dashboard
+View live analytics and coverage reports: **[Coverage Dashboard](https://dayned89.github.io/YourDiscord/)**
+
+**Features:**
+- 📈 Interactive charts showing code distribution and test coverage
+- 📊 Real-time metrics on lines of code by category
+- 🎯 Visual indicators for untested files
+- 📱 Mobile-responsive design with modern UI
 
 ## 🚀 Quick Start
 

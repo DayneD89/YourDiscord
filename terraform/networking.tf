@@ -22,6 +22,12 @@ data "aws_subnets" "default" {
   }
 }
 
+# Environment-specific subnet selection to avoid conflicts
+data "aws_subnet" "default_for_nat" {
+  id = length(data.aws_subnets.default.ids) > 1 && var.env != "main" ? data.aws_subnets.default.ids[1] : data.aws_subnets.default.ids[0]
+}
+
+# Fallback if only one subnet exists
 data "aws_subnet" "default_first" {
   id = data.aws_subnets.default.ids[0]
 }
@@ -31,7 +37,7 @@ resource "aws_subnet" "bot_private" {
   count = var.use_private_subnet ? 1 : 0
   
   vpc_id                  = data.aws_vpc.default.id
-  cidr_block              = "172.31.245.0/24"  # Non-overlapping with default subnets
+  cidr_block              = local.private_subnet_cidr
   availability_zone       = data.aws_subnet.default_first.availability_zone
   map_public_ip_on_launch = false
 
@@ -50,16 +56,30 @@ data "aws_internet_gateway" "default" {
   }
 }
 
-# Elastic IP for NAT Gateway
+# Elastic IP for NAT Gateway (environment-specific to prevent conflicts)
 resource "aws_eip" "nat" {
   count = var.use_private_subnet ? 1 : 0
   
   domain = "vpc"
   
-  tags = {
-    Name = "${local.name}-nat-eip"
-    Purpose = "NAT Gateway for private subnet outbound traffic"
+  # Force creation of new EIP to avoid conflicts
+  lifecycle {
+    prevent_destroy = false
+    create_before_destroy = true
   }
+  
+  tags = {
+    Name = "${local.name}-nat-eip-${random_id.eip_suffix[0].hex}"
+    Environment = var.env
+    Purpose = "NAT Gateway for private subnet outbound traffic"
+    CreatedBy = "terraform"
+  }
+}
+
+# Random suffix to ensure unique EIP names
+resource "random_id" "eip_suffix" {
+  count = var.use_private_subnet ? 1 : 0
+  byte_length = 4
 }
 
 # NAT Gateway for private subnet outbound traffic
@@ -67,14 +87,18 @@ resource "aws_nat_gateway" "bot" {
   count = var.use_private_subnet ? 1 : 0
   
   allocation_id = aws_eip.nat[0].id
-  subnet_id     = data.aws_subnet.default_first.id  # NAT goes in public subnet
+  subnet_id     = data.aws_subnet.default_first.id  # Use first subnet for simplicity
   
   tags = {
     Name = "${local.name}-nat-gateway"
+    Environment = var.env
     Purpose = "Outbound internet access for private subnet"
   }
   
-  depends_on = [data.aws_internet_gateway.default]
+  depends_on = [
+    data.aws_internet_gateway.default,
+    aws_eip.nat
+  ]
 }
 
 # Route table for private subnet

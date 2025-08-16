@@ -10,8 +10,24 @@ terraform/
 ├── *.tfvars                    # Variable value files
 ├── messages/                   # Discord channel content templates
 ├── images/                     # Server branding and assets
+├── networking.tf               # VPC, subnets, and network security
+├── user_data_enhanced.sh.tpl   # Enhanced EC2 initialization with health checks
 └── README.md                   # This documentation
 ```
+
+## 🚀 Recent Infrastructure Enhancements
+
+### Zero-Downtime Deployment System
+- **Enhanced Health Checks**: HTTP endpoint at `:3000/health` with bot readiness signaling
+- **Private Subnet Deployment**: Secure bot hosting with NAT Gateway for enhanced security
+- **Environment Isolation**: Separate CIDR blocks prevent deployment conflicts
+- **Application Readiness**: Bot signals when fully connected to Discord before traffic routing
+
+### Smart Deployment Features
+- **Discord API Resilience**: Terraform wrappers with retry logic for timeout handling
+- **Environment-Specific Configuration**: Different settings for main vs feature branch deployments
+- **Enhanced Security Groups**: Comprehensive network access controls for private deployments
+- **Dependency Management**: Proper resource ordering prevents race conditions
 
 ## 🔧 Core Configuration Files
 
@@ -77,6 +93,18 @@ variable "instance_type" {
   description = "EC2 instance type for the bot"
   type        = string
   default     = "t3.micro"
+}
+
+variable "use_private_subnet" {
+  description = "Deploy bot in private subnet with NAT Gateway"
+  type        = bool
+  default     = true
+}
+
+variable "env" {
+  description = "Environment name (main, features, etc.)"
+  type        = string
+  default     = "development"
 }
 ```
 
@@ -591,6 +619,93 @@ systemctl start yourpartyserver-bot
 
 ---
 
+### `networking.tf`
+**Purpose**: Defines VPC, subnets, and networking components for secure bot deployment with zero-downtime capabilities.
+
+**Key Resources**:
+
+#### Private Subnet for Enhanced Security
+```hcl
+resource "aws_subnet" "bot_private" {
+  count = var.use_private_subnet ? 1 : 0
+  
+  vpc_id                  = data.aws_vpc.default.id
+  cidr_block              = local.private_subnet_cidr
+  availability_zone       = data.aws_subnet.default_first.availability_zone
+  map_public_ip_on_launch = false
+}
+```
+
+#### NAT Gateway for Outbound Access
+```hcl
+resource "aws_nat_gateway" "bot_nat" {
+  count         = var.use_private_subnet ? 1 : 0
+  allocation_id = aws_eip.nat[0].id
+  subnet_id     = data.aws_subnet.default_first.id
+}
+```
+
+#### Environment-Specific CIDR Blocks
+```hcl
+locals {
+  # Prevents subnet conflicts between environments
+  private_subnet_cidr = var.env == "main" ? "172.31.240.0/24" : "172.31.245.0/24"
+}
+```
+
+**When to Modify**:
+- Changing network security requirements
+- Adding additional subnets for multi-AZ deployment
+- Modifying CIDR blocks for different environments
+- Implementing additional network security controls
+
+---
+
+### `user_data_enhanced.sh.tpl`
+**Purpose**: Enhanced EC2 initialization script with health checks and zero-downtime deployment support.
+
+**Key Enhancements**:
+
+#### Health Check Endpoint
+```bash
+# Start health check service
+cat > /opt/health-check.js << 'EOF'
+const http = require('http');
+const fs = require('fs');
+
+const server = http.createServer((req, res) => {
+  if (req.url === '/health') {
+    const isReady = fs.existsSync('/tmp/bot-ready');
+    if (isReady) {
+      res.writeHead(200, {'Content-Type': 'application/json'});
+      res.end(JSON.stringify({
+        status: 'healthy',
+        timestamp: new Date().toISOString()
+      }));
+    } else {
+      res.writeHead(503, {'Content-Type': 'application/json'});
+      res.end(JSON.stringify({status: 'starting'}));
+    }
+  }
+});
+server.listen(3000);
+EOF
+```
+
+#### Bot Readiness Signaling
+```bash
+# Bot signals when ready
+echo "Bot is ready" > /tmp/bot-ready
+```
+
+**When to Modify**:
+- Adding new health check endpoints
+- Implementing additional deployment verification
+- Adding monitoring or logging services
+- Customizing bot startup procedures
+
+---
+
 ## 📂 Supporting Directories
 
 ### `messages/`
@@ -739,13 +854,25 @@ terraform apply -var-file="terraform.tfvars"
 
 ### Environment-Specific Deployments
 ```bash
-# Development environment
-terraform workspace new development
-terraform apply -var-file="dev.tfvars"
+# Features branch deployment (isolated testing)
+terraform apply -var="env=features" -var="use_private_subnet=true"
 
-# Production environment
-terraform workspace new production
-terraform apply -var-file="prod.tfvars"
+# Main branch deployment (production)
+terraform apply -var="env=main" -var="use_private_subnet=true"
+
+# Legacy public deployment (if needed)
+terraform apply -var="env=main" -var="use_private_subnet=false"
+```
+
+### Zero-Downtime Deployment Process
+```bash
+# Health-verified deployment
+terraform apply -var="env=main"
+# Terraform waits for health checks to pass before completing
+
+# Monitor deployment status
+curl -f http://INSTANCE_IP:3000/health
+# Returns: {"status": "healthy", "timestamp": "2024-01-15T14:30:00.000Z"}
 ```
 
 ### Updates and Maintenance
