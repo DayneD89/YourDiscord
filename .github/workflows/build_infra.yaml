@@ -1,7 +1,5 @@
 name: 🚀 Deploy Infrastructure
 on:
-  push:
-    branches: [ main ]
   workflow_run:
     workflows: ["🧪 Test & Coverage"]
     branches: [ main ]

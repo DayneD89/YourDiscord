@@ -195,7 +195,7 @@ locals {
             channel_key = channel.key
             message_name = msg_name
             order = msg_idx
-            content = local.available_messages[msg_name]
+            content = coalesce(lookup(local.available_messages, msg_name, null), "Content not found for ${msg_name}")
           }
         ]
       ] if lookup(channel, "messages", null) != null
@@ -206,6 +206,7 @@ locals {
   channel_messages = {
     for msg in local.all_channel_messages :
     "${msg.channel_key}_${msg.message_name}" => msg
+    if msg.content != null && msg.content != ""
   }
 
   # Role mapping for permissions
@@ -394,6 +395,20 @@ resource "discord_message" "channel_messages" {
   
   channel_id = discord_text_channel.channels[each.value.channel_key].id
   content    = each.value.content
+  
+  depends_on = [
+    discord_text_channel.channels,
+    discord_category_channel.categories,
+    discord_category_channel.regional,
+    discord_server.server
+  ]
+  
+  # Minimal lifecycle management - allow content updates
+  lifecycle {
+    create_before_destroy = false
+    # Ignore embed changes since we don't want them anyway
+    ignore_changes = [embed]
+  }
 }
 
 # Regional & Local (unchanged, positioned at end)

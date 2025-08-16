@@ -433,7 +433,7 @@ jobs:
                       <div style="margin-top: 20px;">
                           <div class="badge">🧪 ${TEST_COUNT} Tests</div>
                           <div class="badge">📁 ${FILES_SRC} Source Files</div>
-                          <div class="badge ${FILES_UNCOVERED -gt 0 ? 'warning' : ''}">⚠️ ${FILES_UNCOVERED} Untested Files</div>
+                          <div class="badge">⚠️ ${FILES_UNCOVERED} Untested Files</div>
                       </div>
                   </div>
                   
@@ -563,7 +563,7 @@ jobs:
                       data: {
                           labels: ['Tested Files', 'Untested Files'],
                           datasets: [{
-                              data: [\$((\${FILES_SRC} - \${FILES_UNCOVERED})), ${FILES_UNCOVERED}],
+                              data: [\$((${FILES_SRC} - ${FILES_UNCOVERED})), ${FILES_UNCOVERED}],
                               backgroundColor: ['#28a745', '#dc3545']
                           }]
                       },

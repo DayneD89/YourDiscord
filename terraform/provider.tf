@@ -44,7 +44,7 @@ terraform {
         # Allows Infrastructure as Code for Discord servers
         discord = {
             source = "Lucky3028/discord"     # Provider registry location
-            version = "2.1.0"               # Exact version for stability
+            version = "~> 2.0"              # Allow minor version updates for stability fixes
         }
         
         # AWS Provider for EC2, S3, and other AWS resources

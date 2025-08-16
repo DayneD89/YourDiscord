@@ -124,4 +124,7 @@ locals {
   # Network configuration - references networking.tf
   vpc_id    = local.selected_vpc_id
   subnet_id = local.selected_subnet_id
+  
+  # Environment-specific private subnet CIDR blocks to avoid conflicts
+  private_subnet_cidr = var.env == "main" ? "172.31.240.0/24" : "172.31.245.0/24"
 }

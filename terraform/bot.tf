@@ -87,7 +87,7 @@ locals {
       action = local.emoji_pool[i]
       to     = format("AddRole(user_id,'%s')", r.name)
       unto   = format("RemoveRole(user_id,'%s')", r.name)
-    }
+    } if i < length(local.emoji_pool)
   ]
 
   town_reaction_rules = flatten([
@@ -97,7 +97,7 @@ locals {
         action = local.emoji_pool[j]
         to     = format("AddRole(user_id,'%s')", t)
         unto   = format("RemoveRole(user_id,'%s')", t)
-      }
+      } if j < length(local.emoji_pool)
     ]
   ])
 

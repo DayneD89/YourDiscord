@@ -53,8 +53,11 @@ describe('ConfigManager', () => {
     it('should use environment variable for bucket if not provided', async () => {
       process.env.S3_BUCKET = 'env-bucket';
       
-      AWSMock.mock('S3', 'getObject', {
-        Body: Buffer.from(JSON.stringify([]))
+      const mockS3 = AWS.__mockS3;
+      mockS3.getObject.mockReturnValue({
+        promise: () => Promise.resolve({
+          Body: Buffer.from(JSON.stringify([]))
+        })
       });
 
       await configManager.initialize(null, mockGuildId);
@@ -65,8 +68,11 @@ describe('ConfigManager', () => {
     });
 
     it('should use default bucket if none provided', async () => {
-      AWSMock.mock('S3', 'getObject', {
-        Body: Buffer.from(JSON.stringify([]))
+      const mockS3 = AWS.__mockS3;
+      mockS3.getObject.mockReturnValue({
+        promise: () => Promise.resolve({
+          Body: Buffer.from(JSON.stringify([]))
+        })
       });
 
       await configManager.initialize(null, mockGuildId);
@@ -82,8 +88,11 @@ describe('ConfigManager', () => {
         { from: 'msg2', action: 'emoji2', to: 'AddRole(user_id,"moderator")' }
       ];
 
-      AWSMock.mock('S3', 'getObject', {
-        Body: Buffer.from(JSON.stringify(mockConfig))
+      const mockS3 = AWS.__mockS3;
+      mockS3.getObject.mockReturnValue({
+        promise: () => Promise.resolve({
+          Body: Buffer.from(JSON.stringify(mockConfig))
+        })
       });
 
       await configManager.initialize(mockBucketName, mockGuildId);
@@ -94,14 +103,17 @@ describe('ConfigManager', () => {
     it('should use default config when S3 key does not exist', async () => {
       const defaultConfig = [{ from: 'default', action: 'default', to: 'default' }];
       
-      AWSMock.mock('S3', 'getObject', (params, callback) => {
-        const error = new Error('The specified key does not exist.');
-        error.code = 'NoSuchKey';
-        callback(error);
+      const mockS3 = AWS.__mockS3;
+      mockS3.getObject.mockReturnValue({
+        promise: () => {
+          const error = new Error('The specified key does not exist.');
+          error.code = 'NoSuchKey';
+          return Promise.reject(error);
+        }
       });
 
-      AWSMock.mock('S3', 'putObject', (params, callback) => {
-        callback(null, {});
+      mockS3.putObject.mockReturnValue({
+        promise: () => Promise.resolve({})
       });
 
       await configManager.initialize(mockBucketName, mockGuildId, defaultConfig);
@@ -112,8 +124,9 @@ describe('ConfigManager', () => {
     it('should use default config when S3 error occurs', async () => {
       const defaultConfig = [{ from: 'fallback', action: 'fallback', to: 'fallback' }];
       
-      AWSMock.mock('S3', 'getObject', (params, callback) => {
-        callback(new Error('S3 connection error'));
+      const mockS3 = AWS.__mockS3;
+      mockS3.getObject.mockReturnValue({
+        promise: () => Promise.reject(new Error('S3 connection error'))
       });
 
       await configManager.initialize(mockBucketName, mockGuildId, defaultConfig);
@@ -124,8 +137,11 @@ describe('ConfigManager', () => {
 
   describe('saveConfig', () => {
     beforeEach(async () => {
-      AWSMock.mock('S3', 'getObject', {
-        Body: Buffer.from(JSON.stringify([]))
+      const mockS3 = AWS.__mockS3;
+      mockS3.getObject.mockReturnValue({
+        promise: () => Promise.resolve({
+          Body: Buffer.from(JSON.stringify([]))
+        })
       });
       
       await configManager.initialize(mockBucketName, mockGuildId);
@@ -134,9 +150,12 @@ describe('ConfigManager', () => {
     it('should save config to S3 with correct parameters', async () => {
       let savedParams;
       
-      AWSMock.mock('S3', 'putObject', (params, callback) => {
+      const mockS3 = AWS.__mockS3;
+      mockS3.putObject.mockImplementation((params) => {
         savedParams = params;
-        callback(null, {});
+        return {
+          promise: () => Promise.resolve({})
+        };
       });
 
       configManager.config = [{ from: 'test', action: 'test', to: 'test' }];
@@ -150,8 +169,9 @@ describe('ConfigManager', () => {
     });
 
     it('should throw error when S3 save fails', async () => {
-      AWSMock.mock('S3', 'putObject', (params, callback) => {
-        callback(new Error('S3 save failed'));
+      const mockS3 = AWS.__mockS3;
+      mockS3.putObject.mockReturnValue({
+        promise: () => Promise.reject(new Error('S3 save failed'))
       });
 
       await expect(configManager.saveConfig()).rejects.toThrow('S3 save failed');
@@ -162,8 +182,11 @@ describe('ConfigManager', () => {
     it('should return current config', async () => {
       const testConfig = [{ from: 'test', action: 'test', to: 'test' }];
       
-      AWSMock.mock('S3', 'getObject', {
-        Body: Buffer.from(JSON.stringify(testConfig))
+      const mockS3 = AWS.__mockS3;
+      mockS3.getObject.mockReturnValue({
+        promise: () => Promise.resolve({
+          Body: Buffer.from(JSON.stringify(testConfig))
+        })
       });
 
       await configManager.initialize(mockBucketName, mockGuildId);
@@ -178,11 +201,14 @@ describe('ConfigManager', () => {
 
   describe('addConfig', () => {
     beforeEach(async () => {
-      AWSMock.mock('S3', 'getObject', {
-        Body: Buffer.from(JSON.stringify([]))
+      const mockS3 = AWS.__mockS3;
+      mockS3.getObject.mockReturnValue({
+        promise: () => Promise.resolve({
+          Body: Buffer.from(JSON.stringify([]))
+        })
       });
-      AWSMock.mock('S3', 'putObject', (params, callback) => {
-        callback(null, {});
+      mockS3.putObject.mockReturnValue({
+        promise: () => Promise.resolve({})
       });
       
       await configManager.initialize(mockBucketName, mockGuildId);
@@ -223,11 +249,14 @@ describe('ConfigManager', () => {
         { from: 'msg2', action: 'emoji2', to: 'AddRole(user_id,"moderator")' }
       ];
       
-      AWSMock.mock('S3', 'getObject', {
-        Body: Buffer.from(JSON.stringify(initialConfig))
+      const mockS3 = AWS.__mockS3;
+      mockS3.getObject.mockReturnValue({
+        promise: () => Promise.resolve({
+          Body: Buffer.from(JSON.stringify(initialConfig))
+        })
       });
-      AWSMock.mock('S3', 'putObject', (params, callback) => {
-        callback(null, {});
+      mockS3.putObject.mockReturnValue({
+        promise: () => Promise.resolve({})
       });
       
       await configManager.initialize(mockBucketName, mockGuildId);
@@ -256,8 +285,11 @@ describe('ConfigManager', () => {
         { from: 'msg2', action: 'emoji2', to: 'AddRole(user_id,"moderator")' }
       ];
       
-      AWSMock.mock('S3', 'getObject', {
-        Body: Buffer.from(JSON.stringify(testConfig))
+      const mockS3 = AWS.__mockS3;
+      mockS3.getObject.mockReturnValue({
+        promise: () => Promise.resolve({
+          Body: Buffer.from(JSON.stringify(testConfig))
+        })
       });
       
       await configManager.initialize(mockBucketName, mockGuildId);

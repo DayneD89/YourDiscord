@@ -80,7 +80,7 @@ class ConfigManager {
         return this.config;
     }
 
-    addConfig(newConfig) {
+    async addConfig(newConfig) {
         // Validate required fields to prevent invalid configurations
         // Message ID and reaction emoji are minimum requirements for reaction roles
         const requiredFields = ['from', 'action'];
@@ -103,10 +103,10 @@ class ConfigManager {
         }
 
         this.config.push(newConfig);
-        return this.saveConfig();
+        return await this.saveConfig();
     }
 
-    removeConfig(messageId, action) {
+    async removeConfig(messageId, action) {
         // Remove specific reaction configuration
         // Validates that the configuration exists before attempting removal
         const initialLength = this.config.length;
@@ -118,7 +118,7 @@ class ConfigManager {
             throw new Error('No config found with the specified message ID and action.');
         }
 
-        return this.saveConfig();
+        return await this.saveConfig();
     }
 
     // Find specific configuration for a message and reaction combination
