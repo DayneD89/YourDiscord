@@ -38,6 +38,8 @@ class EventHandlers {
 
     async handleProposalReaction(reaction, user, type) {
         try {
+            console.log(`handleProposalReaction: ${reaction.emoji.name} ${type} by ${user.tag} on message ${reaction.message.id}`);
+            
             // Fetch partial reactions/messages
             if (reaction.partial) {
                 await reaction.fetch();
@@ -51,17 +53,28 @@ class EventHandlers {
 
             // Check if this is in the correct guild
             if (message.guild?.id !== this.bot.getGuildId()) {
+                console.log(`Wrong guild: ${message.guild?.id} vs ${this.bot.getGuildId()}`);
                 return;
             }
 
+            console.log(`Message channel: ${message.channel.id}`);
+            console.log(`Debate channel: ${this.bot.getDebateChannelId()}`);
+            console.log(`Vote channel: ${this.bot.getVoteChannelId()}`);
+
             // Handle support reactions in debate channel
             if (message.channel.id === this.bot.getDebateChannelId() && emoji === '✅') {
+                console.log('Processing support reaction in debate channel');
                 await this.handleSupportReaction(message);
             }
             
             // Handle voting reactions in vote channel
             else if (message.channel.id === this.bot.getVoteChannelId() && (emoji === '✅' || emoji === '❌')) {
+                console.log('Processing vote reaction in vote channel');
                 await this.handleVotingReaction(message, emoji, type);
+            }
+            
+            else {
+                console.log(`Reaction not in monitored channels or wrong emoji. Channel: ${message.channel.id}, Emoji: ${emoji}`);
             }
 
         } catch (error) {
@@ -71,19 +84,23 @@ class EventHandlers {
 
     async handleSupportReaction(message) {
         try {
+            console.log(`handleSupportReaction called for message ${message.id} in channel ${message.channel.id}`);
+            console.log(`Expected debate channel: ${this.bot.getDebateChannelId()}`);
+            
             // Get the ✅ reaction
             const supportReaction = message.reactions.cache.get('✅');
-            if (!supportReaction) return;
+            if (!supportReaction) {
+                console.log('No ✅ reaction found on message');
+                return;
+            }
 
             // Count support reactions (excluding bot's own reaction)
             const supportCount = Math.max(0, supportReaction.count - (supportReaction.me ? 1 : 0));
             
-            console.log(`Support reaction count for message ${message.id}: ${supportCount}`);
+            console.log(`Support reaction count for message ${message.id}: ${supportCount} (total: ${supportReaction.count}, bot reacted: ${supportReaction.me})`);
 
-            // Check if this reaches the threshold
-            if (supportCount >= 5) {
-                await this.bot.getProposalManager().handleSupportReaction(message, supportCount);
-            }
+            // Always call the proposal manager, let it decide if it should process
+            await this.bot.getProposalManager().handleSupportReaction(message, supportCount);
 
         } catch (error) {
             console.error('Error handling support reaction:', error);

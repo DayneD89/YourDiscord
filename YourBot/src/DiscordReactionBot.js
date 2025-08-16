@@ -181,24 +181,33 @@ class DiscordReactionBot {
 
             console.log(`🔍 Searching for message ${messageId}...`);
 
-            // Search through all text channels
-            for (const [channelId, channel] of guild.channels.cache) {
-                if (channel.isTextBased()) {
-                    try {
-                        const message = await channel.messages.fetch(messageId);
-                        if (message) {
-                            console.log(`✅ Cached message ${messageId} from #${channel.name}`);
-                            messageFound = true;
-                            break;
+            const uniqueMessageIds = [...new Set(config.map(cfg => cfg.from))];
+            console.log(`Found ${uniqueMessageIds.length} unique messages to cache from ${config.length} configs`);
+
+            for (const messageId of uniqueMessageIds) {
+                let messageFound = false;
+
+                console.log(`🔍 Searching for message ${messageId}...`);
+
+                // Search through all text channels
+                for (const [channelId, channel] of guild.channels.cache) {
+                    if (channel.isTextBased()) {
+                        try {
+                            const message = await channel.messages.fetch(messageId);
+                            if (message) {
+                                console.log(`✅ Cached message ${messageId} from #${channel.name}`);
+                                messageFound = true;
+                                break;
+                            }
+                        } catch (err) {
+                            // Message not in this channel, continue
                         }
-                    } catch (err) {
-                        // Message not in this channel, continue
                     }
                 }
-            }
 
-            if (!messageFound) {
-                console.log(`⚠️  Message ${messageId} not found in any channel`);
+                if (!messageFound) {
+                    console.log(`⚠️  Message ${messageId} not found in any channel`);
+                }
             }
         }
         

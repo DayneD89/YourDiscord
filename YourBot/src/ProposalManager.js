@@ -66,11 +66,17 @@ class ProposalManager {
     isValidProposalFormat(content) {
         // Check if message starts with proposal format
         const proposalRegex = /^\*\*(?:Policy|Server Change|Member Policy)\*\*:/i;
-        return proposalRegex.test(content.trim());
+        const isValid = proposalRegex.test(content.trim());
+        console.log(`Checking proposal format for: "${content.substring(0, 50)}..." - Valid: ${isValid}`);
+        return isValid;
     }
 
     async handleSupportReaction(message, reactionCount) {
         const messageId = message.id;
+        
+        console.log(`handleSupportReaction called for message ${messageId} with ${reactionCount} reactions`);
+        console.log(`Message content: "${message.content.substring(0, 100)}..."`);
+        console.log(`Message channel: ${message.channel.id}, Expected debate channel: ${this.bot.getDebateChannelId()}`);
         
         // Check if this is already being tracked
         if (this.proposals.has(messageId)) {
@@ -84,10 +90,12 @@ class ProposalManager {
             return;
         }
 
-        // Check if we have 5 support reactions
-        if (reactionCount >= 5) {
-            console.log(`✅ Proposal ${messageId} has reached 5 support reactions, moving to vote`);
+        // Check if we have enough support reactions (changed for testing)
+        if (reactionCount >= 1) { // TEMP: Changed from 5 to 1 for testing
+            console.log(`✅ Proposal ${messageId} has reached ${reactionCount} support reactions, moving to vote`);
             await this.moveToVote(message);
+        } else {
+            console.log(`Proposal ${messageId} has ${reactionCount} reactions, needs 1 to advance`);
         }
     }
 
@@ -120,7 +128,7 @@ class ProposalManager {
                 content: originalMessage.content,
                 status: 'voting',
                 startTime: new Date().toISOString(),
-                endTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
+                endTime: new Date(Date.now() + 5 * 60 * 1000).toISOString(), // TEMP: 5 minutes for testing
                 yesVotes: 0,
                 noVotes: 0
             };
@@ -155,7 +163,7 @@ ${proposalContent}
 ✅ React with ✅ to SUPPORT this proposal
 ❌ React with ❌ to OPPOSE this proposal
 
-**Voting ends:** <t:${Math.floor((Date.now() + 7 * 24 * 60 * 60 * 1000) / 1000)}:F>
+**Voting ends:** <t:${Math.floor((Date.now() + 5 * 60 * 1000) / 1000)}:F>
 
 React below to cast your vote!`;
     }
@@ -199,10 +207,10 @@ React below to cast your vote!`;
     }
 
     startVotingMonitor() {
-        // Check for ended votes every hour
+        // Check for ended votes every minute for testing
         setInterval(async () => {
             await this.checkEndedVotes();
-        }, 60 * 60 * 1000); // 1 hour
+        }, 60 * 1000); // 1 minute for testing
 
         // Also check on startup
         setTimeout(() => this.checkEndedVotes(), 5000);
