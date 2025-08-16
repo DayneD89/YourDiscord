@@ -31,7 +31,7 @@ resource "aws_subnet" "bot_private" {
   count = var.use_private_subnet ? 1 : 0
   
   vpc_id                  = data.aws_vpc.default.id
-  cidr_block              = "172.31.240.0/24"  # Non-overlapping with default subnets
+  cidr_block              = "172.31.245.0/24"  # Non-overlapping with default subnets
   availability_zone       = data.aws_subnet.default_first.availability_zone
   map_public_ip_on_launch = false
 
