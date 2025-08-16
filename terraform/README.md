@@ -636,7 +636,7 @@ systemctl start yourpartyserver-bot
 ```hcl
 # Discord Configuration
 guild_id  = "123456789012345678"
-bot_token = "YOUR_DISCORD_BOT_TOKEN_HER"
+bot_token = "YOUR_DISCORD_BOT_TOKEN_HERE"
 
 # AWS Configuration
 aws_region   = "us-east-1"
