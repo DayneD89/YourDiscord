@@ -4,7 +4,7 @@ resource "discord_role" "moderator" {
   color       = "16711680"
   mentionable = true
   
-  permissions = "8"
+  permissions = "71488619232390"
 }
 
 resource "discord_role" "member" {

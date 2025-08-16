@@ -111,7 +111,7 @@ locals {
     guild_id           = discord_server.server.id
     moderator_role_id  = discord_role.moderator.id
     member_role_id     = discord_role.member.id
-    command_channel_id = discord_text_channel.governance_bot.id
+    command_channel_id = local.channels["governance_bot"]
     s3_bucket          = aws_s3_object.bot_code.bucket
     s3_key             = aws_s3_object.bot_code.key
     code_hash          = data.archive_file.bot_code.output_md5
@@ -121,16 +121,32 @@ locals {
 
 data "archive_file" "bot_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../YourBot"
   output_path = "${path.module}/../bundle-${var.env}.zip"
-  excludes    = ["node_modules", "package-lock.json"]
+  
+  source {
+    content  = file("${path.module}/../YourBot/bot.js")
+    filename = "bot.js"
+  }
+  
+  source {
+    content  = file("${path.module}/../YourBot/package.json")
+    filename = "package.json"
+  }
+  
+  dynamic "source" {
+    for_each = fileset("${path.module}/../YourBot/src", "*.js")
+    content {
+      content  = file("${path.module}/../YourBot/src/${source.value}")
+      filename = "src/${source.value}"
+    }
+  }
 }
 
 resource "aws_s3_object" "bot_code" {
   bucket = "yourdiscord-terraform-state"
   key    = "bot/bundle-${var.env}.zip"
   source = data.archive_file.bot_code.output_path
-  etag   = data.archive_file.bot_code.output_md5
+  source_hash = data.archive_file.bot_code.output_md5
 }
 
 resource "aws_instance" "bot" {

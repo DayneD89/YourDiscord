@@ -1,62 +1,344 @@
+locals {
+  # Complete channel configuration
+  discord_config = {
+    categories = [
+      {
+        name = "Entry & Info"
+        key = "entry_info"
+        permissions = {
+          everyone = "react_only"
+        }
+        channels = [
+          {
+            name = "welcome-start-here"
+            key = "welcome_start_here"
+            topic = "Pick Member / Non-Member and your region."
+            messages = ["welcome", "region_picker", "town_picker"]
+          },
+          {
+            name = "rules-and-guide"
+            key = "rules_and_guide"
+            topic = "Server constitution and how to get started."
+            messages = ["server_rules", "rules_summary", "channel_guide"]
+          }
+        ]
+      },
+      {
+        name = "Members"
+        key = "members"
+        permissions = {
+          everyone = "hide_view"
+          member = "read_post"
+        }
+        channels = [
+          {
+            name = "members-chat"
+            key = "members_chat"
+            topic = "Members only chat"
+          },
+          {
+            name = "members-resolutions"
+            key = "members_resolutions"
+            topic = "Resolutions passed by members"
+            sync_perms_with_category = false
+            permissions = {
+              everyone = "hide_view"
+              member = "read_only"
+            }
+          },
+          {
+            name = "members-debate"
+            key = "members_debate"
+            topic = "Propose and debate resolutions"
+          },
+          {
+            name = "members-vote"
+            key = "members_vote"
+            topic = "Vote on resolutions"
+            sync_perms_with_category = false
+            permissions = {
+              everyone = "hide_view"
+              member = "react_only"
+            }
+          }
+        ]
+      },
+      {
+        name = "Governance"
+        key = "governance"
+        permissions = {
+          everyone = "hide_view"
+          member = "read_only"
+        }
+        channels = [
+          {
+            name = "governance-links"
+            key = "governance_links"
+            topic = "Links to governance resources"
+            messages = ["contributing_guide"]
+          },
+          {
+            name = "governance-debate"
+            key = "governance_debate"
+            topic = "Propose and debate governance resolutions"
+            sync_perms_with_category = false
+            permissions = {
+              everyone = "hide_view"
+              member = "read_post"
+            }
+          },
+          {
+            name = "governance-vote"
+            key = "governance_vote"
+            topic = "Vote on governance resolutions"
+            permissions = {
+              everyone = "hide_view"
+              member = "react_only"
+            }
+          },
+          {
+            name = "governance-discussion"
+            key = "governance_discussion"
+            topic = "Moderator discussions"
+          },
+          {
+            name = "governance-bot"
+            key = "governance_bot"
+            topic = "Bot Commands"
+            ignore_position = true
+          }
+        ]
+      }
+    ]
+  }
+
+  # Role mapping for permissions
+  role_mapping = {
+    everyone = discord_server.server.id
+    member = discord_role.member.id
+    moderator = discord_role.moderator.id
+  }
+
+  # Pre-calculate all positions to avoid dependency issues
+  total_channels_before_category = {
+    for i in range(length(local.discord_config.categories)) :
+    i => i == 0 ? 0 : sum([
+      for j in range(i) : length(local.discord_config.categories[j].channels)
+    ])
+  }
+
+  # Calculate positions and flatten structure
+  categories_with_positions = [
+    for cat_idx, category in local.discord_config.categories : merge(category, {
+      position = cat_idx
+      channels = [
+        for ch_idx, channel in category.channels : merge(channel, {
+          category_key = category.key
+          category_position = cat_idx
+          # Use pre-calculated positions
+          position = local.total_channels_before_category[cat_idx] + ch_idx
+        })
+      ]
+    })
+  ]
+
+  # Flatten all channels with metadata
+  all_channels_flat = flatten([
+    for category in local.categories_with_positions : [
+      for channel in category.channels : merge(channel, {
+        category_name = category.name
+        category_permissions = category.permissions
+      })
+    ]
+  ])
+
+  # Split channels by position handling
+  positioned_channels = {
+    for ch in local.all_channels_flat : ch.key => ch
+    if !lookup(ch, "ignore_position", false)
+  }
+
+  unpositioned_channels = {
+    for ch in local.all_channels_flat : ch.key => ch
+    if lookup(ch, "ignore_position", false)
+  }
+
+  # Permission data mapping
+  permission_data = {
+    hide_view = {
+      allow = data.discord_permission.hide_view.allow_bits
+      deny = data.discord_permission.hide_view.deny_bits
+    }
+    read_only = {
+      allow = data.discord_permission.read_only.allow_bits
+      deny = data.discord_permission.read_only.deny_bits
+    }
+    read_post = {
+      allow = data.discord_permission.read_post.allow_bits
+      deny = data.discord_permission.read_post.deny_bits
+    }
+    react_only = {
+      allow = data.discord_permission.react_only.allow_bits
+      deny = data.discord_permission.react_only.deny_bits
+    }
+  }
+
+  # Create category lookup
+  categories_by_key = {
+    for cat in local.categories_with_positions : cat.key => cat
+  }
+}
+
 # Categories
-resource "discord_category_channel" "entry_info" {
+resource "discord_category_channel" "categories" {
+  for_each = local.categories_by_key
+
   server_id = discord_server.server.id
-  name      = "Entry & Info"
-  position  = 0
-}
-resource "discord_channel_permission" "entry_info_everyone" {
-  channel_id   = discord_category_channel.entry_info.id
-  type         = "role"
-  overwrite_id = discord_server.server.id
-  allow        = data.discord_permission.react_only.allow_bits
-  deny         = data.discord_permission.react_only.deny_bits
+  name      = each.value.name
+  position  = each.value.position
 }
 
-resource "discord_category_channel" "members" {
-  server_id = discord_server.server.id
-  name      = "Members"
-  position  = 1
-}
-resource "discord_channel_permission" "members_everyone" {
-  channel_id   = discord_category_channel.members.id
+# Category permissions
+resource "discord_channel_permission" "category_permissions" {
+  for_each = merge([
+    for cat_key, category in local.categories_by_key : {
+      for role_name, perm_type in category.permissions :
+      "${cat_key}_${role_name}" => {
+        category_key = cat_key
+        role_name = role_name
+        permission_type = perm_type
+      }
+    }
+  ]...)
+
+  channel_id   = discord_category_channel.categories[each.value.category_key].id
   type         = "role"
-  overwrite_id = discord_server.server.id
-  allow        = data.discord_permission.hide_view.allow_bits
-  deny         = data.discord_permission.hide_view.deny_bits
-}
-resource "discord_channel_permission" "members_members" {
-  channel_id   = discord_category_channel.members.id
-  type         = "role"
-  overwrite_id = discord_role.member.id
-  allow        = data.discord_permission.read_post.allow_bits
-  deny         = data.discord_permission.read_post.deny_bits
+  overwrite_id = local.role_mapping[each.value.role_name]
+  allow        = local.permission_data[each.value.permission_type].allow
+  deny         = local.permission_data[each.value.permission_type].deny
 }
 
-resource "discord_category_channel" "governance" {
+# Positioned channels
+resource "discord_text_channel" "channels" {
+  for_each = local.positioned_channels
+
   server_id = discord_server.server.id
-  name      = "Governance"
-  position  = 2
-}
-resource "discord_channel_permission" "governance_everyone" {
-  channel_id   = discord_category_channel.governance.id
-  type         = "role"
-  overwrite_id = discord_server.server.id
-  allow        = data.discord_permission.hide_view.allow_bits
-  deny         = data.discord_permission.hide_view.deny_bits
-}
-resource "discord_channel_permission" "governance_members" {
-  channel_id   = discord_category_channel.governance.id
-  type         = "role"
-  overwrite_id = discord_role.member.id
-  allow        = data.discord_permission.read_only.allow_bits
-  deny         = data.discord_permission.read_only.deny_bits
+  name      = each.value.name
+  category  = discord_category_channel.categories[each.value.category_key].id
+  topic     = each.value.topic
+  position  = each.value.position
+  
+  sync_perms_with_category = lookup(each.value, "permissions", null) == null
 }
 
+# Unpositioned channels (ignore position changes)
+resource "discord_text_channel" "channels_unpositioned" {
+  for_each = local.unpositioned_channels
+
+  server_id = discord_server.server.id
+  name      = each.value.name
+  category  = discord_category_channel.categories[each.value.category_key].id
+  topic     = each.value.topic
+  
+  sync_perms_with_category = lookup(each.value, "permissions", null) == null
+  
+  lifecycle {
+    ignore_changes = [position]
+  }
+}
+
+# Channel-specific permissions
+resource "discord_channel_permission" "channel_permissions" {
+  for_each = merge(
+    {
+      for item in flatten([
+        for ch_key, channel in local.positioned_channels : 
+        lookup(channel, "permissions", null) != null ? [
+          for role_name, perm_type in channel.permissions : {
+            key = "${ch_key}_${role_name}"
+            value = {
+              channel_key = ch_key
+              role_name = role_name
+              permission_type = perm_type
+              resource_type = "positioned"
+            }
+          }
+        ] : []
+      ]) : item.key => item.value
+    },
+    {
+      for item in flatten([
+        for ch_key, channel in local.unpositioned_channels : 
+        lookup(channel, "permissions", null) != null ? [
+          for role_name, perm_type in channel.permissions : {
+            key = "${ch_key}_${role_name}"
+            value = {
+              channel_key = ch_key
+              role_name = role_name
+              permission_type = perm_type
+              resource_type = "unpositioned"
+            }
+          }
+        ] : []
+      ]) : item.key => item.value
+    }
+  )
+
+  channel_id = each.value.resource_type == "positioned" ? discord_text_channel.channels[each.value.channel_key].id : discord_text_channel.channels_unpositioned[each.value.channel_key].id
+  
+  type         = "role"
+  overwrite_id = local.role_mapping[each.value.role_name]
+  allow        = local.permission_data[each.value.permission_type].allow
+  deny         = local.permission_data[each.value.permission_type].deny
+}
+
+# Messages
+resource "discord_message" "welcome" {
+  channel_id = discord_text_channel.channels["welcome_start_here"].id
+  content    = templatefile("${path.module}/messages/welcome_message.txt", {
+    rules_channel_id = discord_text_channel.channels["rules_and_guide"].id
+  })
+}
+
+resource "discord_message" "region_picker" {
+  channel_id = discord_text_channel.channels["welcome_start_here"].id
+  content    = local.region_picker_content
+}
+
+resource "discord_message" "town_picker" {
+  for_each   = local.per_region_town_content
+  channel_id = discord_text_channel.channels["welcome_start_here"].id
+  content    = each.value
+}
+
+resource "discord_message" "server_rules" {
+  channel_id = discord_text_channel.channels["rules_and_guide"].id
+  content    = file("${path.module}/messages/server_rules.md")
+}
+
+resource "discord_message" "rules_summary" {
+  channel_id = discord_text_channel.channels["rules_and_guide"].id
+  content    = file("${path.module}/messages/rules_summary.md")
+}
+
+resource "discord_message" "channel_guide" {
+  channel_id = discord_text_channel.channels["rules_and_guide"].id
+  content    = file("${path.module}/messages/channel_guide.md")
+}
+
+resource "discord_message" "contributing_guide" {
+  channel_id = discord_text_channel.channels["governance_links"].id
+  content    = file("${path.module}/messages/contributing_guide.md")
+}
+
+# Regional & Local (unchanged, positioned at end)
 resource "discord_category_channel" "regional" {
   server_id = discord_server.server.id
   name      = "Regional & Local"
-  position  = 3
+  # Use configuration length, not resource count
+  position  = length(local.discord_config.categories)
 }
+
 resource "discord_channel_permission" "regional_everyone" {
   channel_id   = discord_category_channel.regional.id
   type         = "role"
@@ -65,270 +347,6 @@ resource "discord_channel_permission" "regional_everyone" {
   deny         = data.discord_permission.hide_view.deny_bits
 }
 
-# --- Entry & Info ---
-resource "discord_text_channel" "welcome_start_here" {
-  server_id = discord_server.server.id
-  name      = "welcome-start-here"
-  category  = discord_category_channel.entry_info.id
-  topic     = "Pick Member / Non-Member and your region."
-  position  = 0
-}
-resource "discord_message" "welcome" {
-  channel_id = discord_text_channel.welcome_start_here.id
-  content    = "By clicking ✅ you confirm you've read <#${discord_text_channel.rules_and_guide.id}> and agree to the rules, and that you are a supporter. React ✅ to get access."
-}
-resource "discord_message" "region_picker" {
-  channel_id = discord_text_channel.welcome_start_here.id
-  content    = local.region_picker_content
-}
-
-resource "discord_message" "town_picker" {
-  for_each   = local.per_region_town_content
-  channel_id = discord_text_channel.welcome_start_here.id
-  content    = each.value
-}
-resource "discord_text_channel" "rules_and_guide" {
-  server_id = discord_server.server.id
-  name      = "rules-and-guide"
-  category  = discord_category_channel.entry_info.id
-  topic     = "Server constitution and how to get started."
-  position  = 1
-}
-resource "discord_message" "server_rules" {
-  channel_id = discord_text_channel.rules_and_guide.id
-  content = <<-EOT
-    # 📋 Server Rules
-
-    Welcome to our community! Please read and follow these rules to ensure a positive experience for everyone.
-
-    ## 🏠 **Chat Spaces - Safe Space Policy**
-    
-    In general chat channels, we maintain a **safe space environment**:
-    
-    • **Be kind and respectful** to all members
-    • **Support each other** - we're here to build community
-    • **No hostile arguments or confrontational discussions**
-    • **Keep conversations welcoming** to new members
-    • **Respect different perspectives** without debate
-    
-    *Chat spaces are for connection, not confrontation.*
-
-    ## 💭 **Debate Channels - Open Discussion Policy**
-    
-    In designated debate channels, open discussion is encouraged:
-    
-    • **All topics welcome** for thoughtful discussion
-    • **Attack ideas, not people** - focus on arguments, not individuals
-    • **No personal attacks, insults, or character assassination**
-    • **Disagree respectfully** - explain why ideas are wrong, don't attack who said them
-    • **Stay on topic** and engage in good faith
-    
-    *Debate the argument, respect the person.*
-
-    ## ⚖️ **Universal Standards**
-    
-    These apply everywhere in the server:
-    
-    • **No harassment, discrimination, or hate speech**
-    • **No spam, excessive self-promotion, or off-topic content**
-    • **Use appropriate channels** for different types of discussion
-    • **Follow Discord Terms of Service**
-    • **Respect moderator decisions**
-
-    ---
-    
-    **Questions about the rules?** Ask a moderator.
-    **See rule violations?** Report them to the moderation team.
-    
-    *Thank you for helping create a welcoming community!*
-  EOT
-}
-
-# Quick Reference Rules
-resource "discord_message" "rules_summary" {
-  channel_id = discord_text_channel.rules_and_guide.id
-  content = <<-EOT
-    ## 🎯 **Quick Reference**
-    
-    **Chat Spaces:** Be kind, be supportive, safe space for all
-    **Debate Channels:** Challenge ideas respectfully, no personal attacks
-    **Everywhere:** No harassment, use right channels, follow Discord ToS
-    
-    *Different spaces, different purposes - know where you are!*
-  EOT
-}
-
-# Channel Guidelines Message
-resource "discord_message" "channel_guide" {
-  channel_id = discord_text_channel.rules_and_guide.id
-  content = <<-EOT
-    ## 📺 **Channel Guide**
-    
-    **🏠 Entry & Info:**
-    • #welcome-start-here - New member welcome and introduction
-    • #rules-and-guide - Server rules and guidelines (this channel)
-    
-    **👥 Members (Safe Space Policy):**
-    • #members-chat - General community chat and conversation
-    • #members-resolutions - Passed resolutions and policies
-    • #members-debate - Policy proposals and open discussion
-    • #members-vote - Active votes on proposals
-    
-    **⚖️ Governance (Open Discussion Policy):**
-    • #governance-links - Important governance resources
-    • #governance-debate - Server change proposals and political discussions
-    • #governance-vote - Active votes on server changes
-    • #governance-discussion - General governance topics
-    • #governance-bot - Bot commands and management
-    
-    **📍 Regional & Local (Safe Space Policy):**
-    • Multiple regional and local channels available
-    • Select as many regions and towns as you want to view
-    • Location-based community discussions and local topics
-    
-    ## 📝 **Proposal Process**
-    
-    **For Member Policies & Server Changes:**
-    1. **Propose** - Submit policy using designated format in debate channel
-    2. **Support** - Proposal needs 5 support reactions to advance
-    3. **Vote** - Moved to vote channel for 7 days
-    4. **Pass** - More support than oppose reactions = passed
-    5. **Archive** - Passed proposals moved to resolutions channel
-    
-    *Proposals can also be made to remove existing resolutions*
-    
-    *Remember: Safe space channels prioritize kindness and support, while open discussion channels allow respectful debate of ideas.*
-  EOT
-}
-
-# --- Members ---
-resource "discord_text_channel" "members_chat" {
-  server_id = discord_server.server.id
-  name      = "members-chat"
-  category  = discord_category_channel.members.id
-  topic     = "Members only chat"
-  position  = 5
-}
-resource "discord_text_channel" "members_resolutions" {
-  server_id = discord_server.server.id
-  name      = "members-resolutions"
-  category  = discord_category_channel.members.id
-  topic     = "Resoutions passed by members"
-  position  = 6
-  sync_perms_with_category = false
-}
-resource "discord_channel_permission" "members_resolutions_everyone" {
-  channel_id   = discord_text_channel.members_resolutions.id
-  type         = "role"
-  overwrite_id = discord_server.server.id
-  allow        = data.discord_permission.hide_view.allow_bits
-  deny         = data.discord_permission.hide_view.deny_bits
-}
-resource "discord_channel_permission" "members_resolutions" {
-  channel_id   = discord_text_channel.members_resolutions.id
-  type         = "role"
-  overwrite_id = discord_role.member.id
-  allow        = data.discord_permission.read_only.allow_bits
-  deny         = data.discord_permission.read_only.deny_bits
-}
-resource "discord_text_channel" "members_debate" {
-  server_id = discord_server.server.id
-  name      = "members-debate"
-  category  = discord_category_channel.members.id
-  topic     = "Propose and debate resolutions"
-  position  = 7
-}
-resource "discord_text_channel" "members_vote" {
-  server_id = discord_server.server.id
-  name      = "members-vote"
-  category  = discord_category_channel.members.id
-  topic     = "Vote on resolutions"
-  position  = 8
-  sync_perms_with_category = false
-}
-resource "discord_channel_permission" "members_vote-everyone" {
-  channel_id   = discord_text_channel.members_vote.id
-  type         = "role"
-  overwrite_id = discord_server.server.id
-  allow        = data.discord_permission.hide_view.allow_bits
-  deny         = data.discord_permission.hide_view.deny_bits
-}
-resource "discord_channel_permission" "members_vote" {
-  channel_id   = discord_text_channel.members_vote.id
-  type         = "role"
-  overwrite_id = discord_role.member.id
-  allow        = data.discord_permission.react_only.allow_bits
-  deny         = data.discord_permission.react_only.deny_bits
-}
-
-# --- Governance ---
-resource "discord_text_channel" "governance_links" {
-  server_id = discord_server.server.id
-  name      = "governance-links"
-  category  = discord_category_channel.governance.id
-  topic     = "Links to governance resources"
-  position  = 9
-}
-resource "discord_text_channel" "governance_debate" {
-  server_id = discord_server.server.id
-  name      = "governance-debate"
-  category  = discord_category_channel.governance.id
-  topic     = "Propose and debate governance resolutions"
-  position  = 10
-  sync_perms_with_category = false
-}
-resource "discord_channel_permission" "governance_debate_everyone" {
-  channel_id   = discord_text_channel.governance_debate.id
-  type         = "role"
-  overwrite_id = discord_server.server.id
-  allow        = data.discord_permission.hide_view.allow_bits
-  deny         = data.discord_permission.hide_view.deny_bits
-}
-resource "discord_channel_permission" "governance_debate" {
-  channel_id   = discord_text_channel.governance_debate.id
-  type         = "role"
-  overwrite_id = discord_role.member.id
-  allow        = data.discord_permission.read_post.allow_bits
-  deny         = data.discord_permission.read_post.deny_bits
-}
-resource "discord_text_channel" "governance_vote" {
-  server_id = discord_server.server.id
-  name      = "governance-vote"
-  category  = discord_category_channel.governance.id
-  topic     = "Vote on governance resolutions"
-  position  = 11
-}
-resource "discord_channel_permission" "governance_vote_everyone" {
-  channel_id   = discord_text_channel.governance_vote.id
-  type         = "role"
-  overwrite_id = discord_server.server.id
-  allow        = data.discord_permission.hide_view.allow_bits
-  deny         = data.discord_permission.hide_view.deny_bits
-}
-resource "discord_channel_permission" "governance_vote" {
-  channel_id   = discord_text_channel.governance_vote.id
-  type         = "role"
-  overwrite_id = discord_role.member.id
-  allow        = data.discord_permission.react_only.allow_bits
-  deny         = data.discord_permission.react_only.deny_bits
-}
-resource "discord_text_channel" "governance_discussion" {
-  server_id = discord_server.server.id
-  name      = "governance-discussion"
-  category  = discord_category_channel.governance.id
-  topic     = "Moderator discussions"
-  position  = 12
-}
-resource "discord_text_channel" "governance_bot" {
-  server_id = discord_server.server.id
-  name      = "governance-bot"
-  category  = discord_category_channel.governance.id
-  topic     = "Bot Commands"
-  position  = 13
-  lifecycle { ignore_changes = [position] }
-}
-
-# --- Regional & Local ---
 resource "discord_text_channel" "regional" {
   for_each = { for r in local.region_objs : r.key => r }
 
@@ -342,6 +360,7 @@ resource "discord_text_channel" "regional" {
     ignore_changes = [position]
   }
 }
+
 resource "discord_channel_permission" "regional-ov" {
   for_each = { for r in local.region_objs : r.key => r }
   channel_id   = discord_text_channel.regional[each.key].id
@@ -366,6 +385,7 @@ resource "discord_text_channel" "local" {
     ignore_changes = [position]
   }
 }
+
 resource "discord_channel_permission" "local-ov" {
   for_each = {
     for o in local.town_objs : "${o.region_key}__${o.town_key}" => o
@@ -375,4 +395,29 @@ resource "discord_channel_permission" "local-ov" {
   overwrite_id = discord_role.town[each.key].id
   allow        = data.discord_permission.read_post.allow_bits
   deny         = data.discord_permission.read_post.deny_bits
+}
+
+# Lookup locals for easy reference
+locals {
+  # Channel ID lookups
+  channels = merge(
+    { for k, v in discord_text_channel.channels : k => v.id },
+    { for k, v in discord_text_channel.channels_unpositioned : k => v.id },
+    { for k, v in discord_text_channel.regional : "regional_${k}" => v.id },
+    { for k, v in discord_text_channel.local : "local_${k}" => v.id }
+  )
+  
+  # Category ID lookups  
+  categories = {
+    for k, v in discord_category_channel.categories : k => v.id
+  }
+  
+  # Message ID lookups
+  messages = {
+    welcome = discord_message.welcome.id
+    region_picker = discord_message.region_picker.id
+    server_rules = discord_message.server_rules.id
+    rules_summary = discord_message.rules_summary.id
+    channel_guide = discord_message.channel_guide.id
+  }
 }

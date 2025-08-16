@@ -14,6 +14,34 @@ locals {
         "Berwick-upon-Tweed",
         "Blyth/Ashington/Morpeth"
       ]
+    },
+    "North West" = {
+      towns = [
+        "Manchester",
+        "Liverpool",
+        "Preston",
+        "Blackpool",
+        "Bolton",
+        "Oldham",
+        "Stockport",
+        "Warrington",
+        "Blackburn",
+        "Burnley"
+      ]
+    },
+    "Yorkshire and Humber" = {
+      towns = [
+        "Leeds",
+        "Sheffield",
+        "Bradford",
+        "Hull",
+        "York",
+        "Wakefield",
+        "Huddersfield",
+        "Doncaster",
+        "Rotherham",
+        "Barnsley"
+      ]
     }
   }
 
