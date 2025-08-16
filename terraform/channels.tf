@@ -75,7 +75,9 @@ resource "discord_text_channel" "welcome_start_here" {
 }
 resource "discord_message" "welcome" {
   channel_id = discord_text_channel.welcome_start_here.id
-  content    = "By clicking ✅ you confirm you've read <#${discord_text_channel.rules_and_guide.id}> and agree to the rules, and that you are a supporter. React ✅ to get access."
+  content    = templatefile("${path.module}/messages/welcome_message.txt", {
+    rules_channel_id = discord_text_channel.rules_and_guide.id
+  })
 }
 resource "discord_message" "region_picker" {
   channel_id = discord_text_channel.welcome_start_here.id
@@ -96,109 +98,19 @@ resource "discord_text_channel" "rules_and_guide" {
 }
 resource "discord_message" "server_rules" {
   channel_id = discord_text_channel.rules_and_guide.id
-  content = <<-EOT
-    # 📋 Server Rules
-
-    Welcome to our community! Please read and follow these rules to ensure a positive experience for everyone.
-
-    ## 🏠 **Chat Spaces - Safe Space Policy**
-    
-    In general chat channels, we maintain a **safe space environment**:
-    
-    • **Be kind and respectful** to all members
-    • **Support each other** - we're here to build community
-    • **No hostile arguments or confrontational discussions**
-    • **Keep conversations welcoming** to new members
-    • **Respect different perspectives** without debate
-    
-    *Chat spaces are for connection, not confrontation.*
-
-    ## 💭 **Debate Channels - Open Discussion Policy**
-    
-    In designated debate channels, open discussion is encouraged:
-    
-    • **All topics welcome** for thoughtful discussion
-    • **Attack ideas, not people** - focus on arguments, not individuals
-    • **No personal attacks, insults, or character assassination**
-    • **Disagree respectfully** - explain why ideas are wrong, don't attack who said them
-    • **Stay on topic** and engage in good faith
-    
-    *Debate the argument, respect the person.*
-
-    ## ⚖️ **Universal Standards**
-    
-    These apply everywhere in the server:
-    
-    • **No harassment, discrimination, or hate speech**
-    • **No spam, excessive self-promotion, or off-topic content**
-    • **Use appropriate channels** for different types of discussion
-    • **Follow Discord Terms of Service**
-    • **Respect moderator decisions**
-
-    ---
-    
-    **Questions about the rules?** Ask a moderator.
-    **See rule violations?** Report them to the moderation team.
-    
-    *Thank you for helping create a welcoming community!*
-  EOT
+  content = file("${path.module}/messages/server_rules.md")
 }
 
 # Quick Reference Rules
 resource "discord_message" "rules_summary" {
   channel_id = discord_text_channel.rules_and_guide.id
-  content = <<-EOT
-    ## 🎯 **Quick Reference**
-    
-    **Chat Spaces:** Be kind, be supportive, safe space for all
-    **Debate Channels:** Challenge ideas respectfully, no personal attacks
-    **Everywhere:** No harassment, use right channels, follow Discord ToS
-    
-    *Different spaces, different purposes - know where you are!*
-  EOT
+  content = file("${path.module}/messages/rules_summary.md")
 }
 
 # Channel Guidelines Message
 resource "discord_message" "channel_guide" {
   channel_id = discord_text_channel.rules_and_guide.id
-  content = <<-EOT
-    ## 📺 **Channel Guide**
-    
-    **🏠 Entry & Info:**
-    • #welcome-start-here - New member welcome and introduction
-    • #rules-and-guide - Server rules and guidelines (this channel)
-    
-    **👥 Members (Safe Space Policy):**
-    • #members-chat - General community chat and conversation
-    • #members-resolutions - Passed resolutions and policies
-    • #members-debate - Policy proposals and open discussion
-    • #members-vote - Active votes on proposals
-    
-    **⚖️ Governance (Open Discussion Policy):**
-    • #governance-links - Important governance resources
-    • #governance-debate - Server change proposals and political discussions
-    • #governance-vote - Active votes on server changes
-    • #governance-discussion - General governance topics
-    • #governance-bot - Bot commands and management
-    
-    **📍 Regional & Local (Safe Space Policy):**
-    • Multiple regional and local channels available
-    • Select as many regions and towns as you want to view
-    • Location-based community discussions and local topics
-    
-    ## 📝 **Proposal Process**
-    
-    **For Member Policies & Server Changes:**
-    1. **Propose** - Submit policy using designated format in debate channel
-    2. **Support** - Proposal needs 5 support reactions to advance
-    3. **Vote** - Moved to vote channel for 7 days
-    4. **Pass** - More support than oppose reactions = passed
-    5. **Archive** - Passed proposals moved to resolutions channel
-    
-    *Proposals can also be made to remove existing resolutions*
-    
-    *Remember: Safe space channels prioritize kindness and support, while open discussion channels allow respectful debate of ideas.*
-  EOT
+  content = file("${path.module}/messages/channel_guide.md")
 }
 
 # --- Members ---

@@ -130,7 +130,7 @@ resource "aws_s3_object" "bot_code" {
   bucket = "yourdiscord-terraform-state"
   key    = "bot/bundle-${var.env}.zip"
   source = data.archive_file.bot_code.output_path
-  etag   = data.archive_file.bot_code.output_md5
+  source_hash = data.archive_file.bot_code.output_md5
 }
 
 resource "aws_instance" "bot" {
