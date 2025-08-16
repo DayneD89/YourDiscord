@@ -111,7 +111,7 @@ locals {
     guild_id           = discord_server.server.id
     moderator_role_id  = discord_role.moderator.id
     member_role_id     = discord_role.member.id
-    command_channel_id = discord_text_channel.governance_bot.id
+    command_channel_id = local.channels["governance_bot"]
     s3_bucket          = aws_s3_object.bot_code.bucket
     s3_key             = aws_s3_object.bot_code.key
     code_hash          = data.archive_file.bot_code.output_md5

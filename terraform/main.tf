@@ -9,7 +9,7 @@ resource discord_server server {
 }
 
 resource discord_invite this {
-  channel_id = discord_text_channel.welcome_start_here.id
+  channel_id = local.channels["welcome_start_here"]
   max_age    = 0
 }
 
@@ -29,5 +29,5 @@ output mod {
   value = discord_role.moderator.id
 }
 output bot {
-  value = discord_text_channel.governance_bot.id
+  value = local.channels["governance_bot"]
 }
