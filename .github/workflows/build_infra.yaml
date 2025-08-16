@@ -24,12 +24,27 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: YourBot/package-lock.json
+
+      - name: 📋 Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('YourBot/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
 
       - name: 📋 Install dependencies
         working-directory: YourBot
-        run: npm ci
+        run: |
+          # Check if package-lock.json exists and is valid
+          if [ -f "package-lock.json" ]; then
+            echo "✅ package-lock.json found"
+            cat package-lock.json | head -10
+            npm ci
+          else
+            echo "❌ package-lock.json not found, using npm install"
+            npm install
+          fi
 
       - name: 🧪 Run tests before deploy
         working-directory: YourBot
