@@ -1,64 +1,30 @@
-# Policy Proposal System
+🗳️ **Policy Proposal System** 🗳️
 
-This system is for proposing **policies our organisation should support** as your party supporters.
+💡 Propose **policies our community should support** through democratic governance.
 
-## How It Works
+## 🔄 Process
+📝 **Submit** → ✅ **Get Support** → 🗳️ **Vote** → 📋 **Resolution**
 
-**1. Submit Policy** → **2. Get 5 Support Reactions** → **3. Vote for 7 Days** → **4. Official Position**
+## 📤 Submit Policy
 
----
+**Format:** `**Policy**: Your proposal here`
 
-## Submit Your Policy Proposal
+**Examples:**
+- `**Policy**: Weekly community events for engagement`
+- `**Policy**: Mentorship program for new members`
+- `**Policy**: Open-source development standards`
 
-### Required Format:
-```
-**Policy**: Your policy proposal here
-```
+## 🗳️ Voting Process
+1. Get support reactions to advance to voting
+2. Community votes with ✅ (support) or ❌ (oppose)
+3. Results become official community positions
 
-### Good Examples:
-```
-**Policy**: Renationalise water utilities to ensure public ownership of essential services.
+## 📝 Guidelines
+- **Be Clear**: State exactly what you want
+- **Community-Wide**: Benefit everyone
+- **Specific**: Include enough detail
 
-**Policy**: Support universal basic income of £1,000 per month for economic security.
+## 📂 Categories
+🤝 Community • 🛠️ Technical • 📚 Education • 🎯 Projects • 🌐 External • 📈 Growth
 
-**Policy**: Oppose NHS privatisation and demand full public funding for healthcare.
-
-**Policy**: Support 4-day working week with no pay reduction for worker wellbeing.
-```
-
----
-
-## Getting Support
-
-- Your policy needs **5 reactions** to advance to voting
-- Once you reach 5 supporters, the bot moves it to voting automatically
-- The vote runs for **7 days** with support or oppose reactions
-
----
-
-## Results
-
-**Policy Passes**: Becomes an official organisational position, added to our resolutions
-
-**Policy Fails**: Not adopted as official position, can be resubmitted later with modifications
-
----
-
-## Guidelines
-
-**Think Nationally/Internationally**: Policies should address broader socialist goals
-
-**Be Clear**: State exactly what you want the organisation to support or oppose
-
-## Policy Categories
-
-- **Economic Justice**: Nationalisation, worker ownership, wealth redistribution
-- **Social Services**: Healthcare, education, housing, transport
-- **Workers' Rights**: Union support, workplace democracy, fair wages
-- **Environmental**: Green New Deal, public ownership of utilities
-- **Anti-Oppression**: Solidarity with marginalized communities
-- **International**: Solidarity with global socialist movements
-
----
-
-Ready to propose? Use the format: **Policy**: Your proposal here
+**More Info**: [Contributing Guides](https://github.com/DayneD89/YourDiscord/tree/main/docs)

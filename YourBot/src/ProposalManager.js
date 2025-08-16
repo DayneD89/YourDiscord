@@ -2,28 +2,36 @@ const ProposalStorage = require('./ProposalStorage');
 const ProposalParser = require('./ProposalParser');
 const WithdrawalProcessor = require('./WithdrawalProcessor');
 
+// Manages the democratic proposal and voting system
+// Coordinates proposal parsing, storage, voting, and resolution processing
+// Enables community self-governance through structured proposals and voting
 class ProposalManager {
     constructor(bot) {
         this.bot = bot;
-        this.proposalConfig = null;
-        this.storage = new ProposalStorage();
-        this.parser = null;
-        this.withdrawalProcessor = null;
+        this.proposalConfig = null;           // Configuration for different proposal types
+        this.storage = new ProposalStorage(); // S3-backed persistent storage
+        this.parser = null;                   // Proposal format parser
+        this.withdrawalProcessor = null;      // Handles proposal withdrawals
     }
 
     async initialize(bucketName, guildId, proposalConfig) {
+        // Setup proposal system with configuration for different proposal types
+        // Each type has its own channels, thresholds, and voting duration
         this.proposalConfig = proposalConfig;
         this.parser = new ProposalParser(proposalConfig);
         this.withdrawalProcessor = new WithdrawalProcessor(this.bot, proposalConfig);
         
         console.log(`Proposal config loaded:`, JSON.stringify(proposalConfig, null, 2));
         
+        // Initialize persistent storage for proposal tracking
         await this.storage.initialize(bucketName, guildId);
         
-        // Start the voting monitor
+        // Start background monitoring for vote completion
         this.startVotingMonitor();
     }
 
+    // Process support reactions to determine if proposals should advance to voting
+    // Tracks reaction thresholds and automatically moves proposals when requirements are met
     async handleSupportReaction(message, reactionCount) {
         const messageId = message.id;
         const channelId = message.channel.id;
@@ -32,13 +40,15 @@ class ProposalManager {
         console.log(`Message content: "${message.content.substring(0, 100)}..."`);
         console.log(`Message channel: ${channelId}`);
         
-        // Check if this is already being tracked
+        // Avoid processing proposals that are already in the system
+        // Prevents duplicate tracking and processing conflicts
         if (this.storage.getProposal(messageId)) {
             console.log(`Message ${messageId} already being tracked`);
             return;
         }
 
-        // Get proposal type and config
+        // Parse proposal to determine type and requirements
+        // Different proposal types have different channels and thresholds
         const proposalMatch = this.parser.getProposalType(channelId, message.content);
         if (!proposalMatch) {
             console.log(`Message ${messageId} is not a valid proposal for this channel`);
@@ -48,7 +58,8 @@ class ProposalManager {
         const { type, config, isWithdrawal } = proposalMatch;
         const requiredReactions = config.supportThreshold;
 
-        // Check if we have enough support reactions
+        // Advance proposal to voting phase when threshold is met
+        // This automates the democratic process without manual intervention
         if (reactionCount >= requiredReactions) {
             console.log(`${type} ${isWithdrawal ? 'withdrawal ' : ''}proposal ${messageId} has reached ${reactionCount}/${requiredReactions} support reactions, moving to vote`);
             await this.moveToVote(message, type, config, isWithdrawal);
@@ -159,20 +170,26 @@ class ProposalManager {
         }
     }
 
+    // Start background monitoring for vote completion
+    // Ensures votes are processed promptly when their time expires
     startVotingMonitor() {
-        // Check for ended votes every minute for testing
+        // Regular interval checking for ended votes
+        // More frequent checking ensures timely vote resolution
         setInterval(async () => {
             await this.checkEndedVotes();
         }, 60 * 1000);
 
-        // Also check on startup
+        // Initial check on startup to process any votes that ended while bot was offline
         setTimeout(() => this.checkEndedVotes(), 5000);
     }
 
+    // Check all active votes for expiration and process completed ones
+    // Critical for maintaining democratic process integrity and timely results
     async checkEndedVotes() {
         const now = new Date();
         console.log('Checking for ended votes...');
         
+        // Get all currently active votes and check their end times
         const activeVotes = this.storage.getActiveVotes();
         for (const proposal of activeVotes) {
             if (now > new Date(proposal.endTime)) {
@@ -239,9 +256,12 @@ ${passed ?
         }
     }
 
+    // Move passed proposals to their resolutions channel as official policy
+    // Creates permanent record of community decisions for reference and enforcement
     async moveToResolutions(proposal, guild) {
         try {
-            // Get the appropriate resolutions channel for this proposal type
+            // Find the appropriate resolutions channel for this proposal type
+            // Different types may have different resolution channels for organization
             const proposalTypeConfig = this.proposalConfig[proposal.proposalType];
             const resolutionsChannelId = proposalTypeConfig.resolutionsChannelId;
             const resolutionsChannel = guild.channels.cache.get(resolutionsChannelId);

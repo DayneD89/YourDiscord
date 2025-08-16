@@ -1,0 +1,8 @@
+# YourPartyServer Terraform Configuration
+# Copy this file to terraform.tfvars and set your values
+
+# Required Variables
+discord_token = "YOUR_DISCORD_BOT_TOKEN_HERE"
+
+# Optional - change environment name
+env = "prod"

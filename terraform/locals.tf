@@ -112,3 +112,16 @@ locals {
     ))
   }
 }
+
+# =============================================================================
+# INFRASTRUCTURE LOCALS
+# =============================================================================
+
+locals {
+  # Environment-based naming
+  name = "yourdiscord-${var.env}"
+  
+  # Network configuration - references networking.tf
+  vpc_id    = local.selected_vpc_id
+  subnet_id = local.selected_subnet_id
+}

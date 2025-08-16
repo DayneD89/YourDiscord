@@ -1,28 +1,30 @@
 const { PermissionFlagsBits } = require('discord.js');
 
+// Validates user permissions and eligibility for bot actions
+// Centralizes permission checking logic to ensure consistent security
+// Prevents unauthorized users from accessing restricted bot features
 class UserValidator {
     constructor() {
         // Future: Add mute tracking, timeout tracking, etc.
     }
 
-    /**
-     * Check if a user can perform actions (not used yet, but ready for future use)
-     * @param {GuildMember} member - Discord guild member
-     * @param {string} memberRoleId - ID of the member role
-     * @returns {Object} - { canAct: boolean, reason?: string }
-     */
+    // Comprehensive eligibility check for bot actions
+    // Validates membership status, timeout status, and bot detection
+    // Provides detailed reasons for denials to aid in troubleshooting
     canAct(member, memberRoleId) {
-        // Check if user is a bot
+        // Prevent bots from triggering actions to avoid automation loops
         if (member.user.bot) {
             return { canAct: false, reason: 'User is a bot' };
         }
 
-        // Check if user is a member (has the member role)
+        // Require member role for most bot interactions
+        // This ensures only verified community members can use advanced features
         if (!member.roles.cache.has(memberRoleId)) {
             return { canAct: false, reason: 'User is not a member' };
         }
 
-        // Check if user is currently muted/timed out
+        // Respect Discord timeouts as a form of moderation
+        // Timed out users shouldn't be able to bypass restrictions via bot actions
         if (member.isCommunicationDisabled()) {
             return { canAct: false, reason: 'User is currently timed out' };
         }
@@ -36,17 +38,15 @@ class UserValidator {
         return { canAct: true };
     }
 
-    /**
-     * Check if a user can use moderator commands
-     * @param {GuildMember} member - Discord guild member
-     * @param {string} moderatorRoleId - ID of the moderator role
-     * @returns {boolean}
-     */
+    // Determine if user has moderator privileges for bot commands
+    // Checks both designated moderator role and Discord permissions
+    // Allows flexibility in permission assignment while maintaining security
     canUseModerator(member, moderatorRoleId) {
-        // Check moderator role
+        // Check for assigned moderator role
         const hasModerator = moderatorRoleId && member.roles.cache.has(moderatorRoleId);
         
-        // Check manage roles permission
+        // Check for Discord manage roles permission as alternative
+        // This allows server admins to use moderator commands without specific role
         const hasPermissions = member.permissions.has(PermissionFlagsBits.ManageRoles);
         
         return hasModerator || hasPermissions;

@@ -1,12 +1,17 @@
+// Handles proposal withdrawals and resolution removal
+// Manages the complex process of finding and removing passed resolutions
+// Enables democratic reversal of previous community decisions
 class WithdrawalProcessor {
     constructor(bot, proposalConfig) {
         this.bot = bot;
         this.proposalConfig = proposalConfig;
     }
 
+    // Parse withdrawal proposal to find the target resolution to remove
+    // Searches resolution channels to locate the specific resolution being withdrawn
     async parseWithdrawalTarget(content, proposalType, config) {
         try {
-            // Extract the resolution reference from the withdrawal proposal
+            // Extract resolution reference from withdrawal proposal text
             // Expected format: **Withdraw**: [Resolution description/link]
             const withdrawMatch = content.match(/\*\*Withdraw\*\*:\s*(.+)/i);
             if (!withdrawMatch) {
@@ -17,7 +22,7 @@ class WithdrawalProcessor {
             const withdrawalContent = withdrawMatch[1].trim();
             console.log(`Looking for resolution to withdraw: "${withdrawalContent}"`);
 
-            // Search for the resolution in the resolutions channel
+            // Access the resolutions channel to search for target resolution
             const guild = this.bot.client.guilds.cache.get(this.bot.getGuildId());
             const resolutionsChannelId = config.resolutionsChannelId;
             const resolutionsChannel = guild.channels.cache.get(resolutionsChannelId);
@@ -57,15 +62,16 @@ class WithdrawalProcessor {
         }
     }
 
+    // Determine if a resolution matches the withdrawal target using multiple strategies
+    // Uses fuzzy matching to handle variations in wording and partial references
     isMatchingResolution(resolutionContent, withdrawalTarget) {
-        // Try multiple matching strategies
-        
-        // 1. Check if withdrawal target is contained in resolution
+        // Strategy 1: Direct substring matching for exact references
         if (resolutionContent.toLowerCase().includes(withdrawalTarget.toLowerCase())) {
             return true;
         }
 
-        // 2. Extract the actual policy text from the resolution and compare
+        // Strategy 2: Extract and compare policy text specifically
+        // Focuses on the actual policy content rather than metadata
         const policyMatch = resolutionContent.match(/\*\*(?:Policy|Governance|Resolution)\*\*:\s*(.+?)(?:\n|$)/i);
         if (policyMatch) {
             const policyText = policyMatch[1].trim();
@@ -75,12 +81,13 @@ class WithdrawalProcessor {
             }
         }
 
-        // 3. Check for keyword overlap (for partial matches)
+        // Strategy 3: Keyword overlap analysis for partial matches
+        // Handles cases where withdrawal references don't exactly match resolution text
         const withdrawalWords = withdrawalTarget.toLowerCase().split(/\s+/).filter(w => w.length > 3);
         const resolutionWords = resolutionContent.toLowerCase().split(/\s+/);
         const matchCount = withdrawalWords.filter(word => resolutionWords.some(rw => rw.includes(word))).length;
         
-        // If most keywords match, consider it a match
+        // Require 60% keyword overlap to minimize false matches
         if (withdrawalWords.length > 0 && matchCount / withdrawalWords.length >= 0.6) {
             return true;
         }
@@ -99,6 +106,8 @@ class WithdrawalProcessor {
         return resolutionContent;
     }
 
+    // Execute the withdrawal by removing the target resolution and posting notification
+    // Creates permanent record of the withdrawal for transparency and accountability
     async processWithdrawal(proposal, guild) {
         try {
             if (!proposal.targetResolution) {
@@ -106,7 +115,8 @@ class WithdrawalProcessor {
                 return;
             }
 
-            // Delete the original resolution message
+            // Remove the original resolution message from the resolutions channel
+            // This effectively revokes the policy from active status
             const resolutionsChannel = guild.channels.cache.get(proposal.targetResolution.channelId);
             if (resolutionsChannel) {
                 try {

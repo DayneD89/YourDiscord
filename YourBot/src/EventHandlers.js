@@ -1,6 +1,9 @@
 const { ChannelType } = require('discord.js');
 const ActionExecutor = require('./ActionExecutor');
 
+// Handles Discord events and routes them to appropriate processors
+// Manages both reaction role events and proposal system events
+// Acts as the main entry point for all Discord interactions
 class EventHandlers {
     constructor(bot) {
         this.bot = bot;
@@ -8,39 +11,39 @@ class EventHandlers {
     }
 
     async handleReactionAdd(reaction, user) {
-        console.log(`[RAW REACTION EVENT] Reaction added: ${reaction.emoji.name} by ${user.tag} on message ${reaction.message.id}`);
-        
-        if (this.bot.getUserValidator().isBot(user)) {
-            console.log('Ignoring bot reaction');
-            return;
-        }
-
-        // Handle both existing config-based reactions and new proposal system
-        await Promise.all([
-            this.handleReaction(reaction, user, 'add'),
-            this.handleProposalReaction(reaction, user, 'add')
-        ]);
+        await this.processReaction(reaction, user, 'add');
     }
 
     async handleReactionRemove(reaction, user) {
-        console.log(`[RAW REACTION EVENT] Reaction removed: ${reaction.emoji.name} by ${user.tag} on message ${reaction.message.id}`);
+        await this.processReaction(reaction, user, 'remove');
+    }
+
+    // Common reaction processing logic to avoid duplication
+    async processReaction(reaction, user, type) {
+        console.log(`[RAW REACTION EVENT] Reaction ${type}: ${reaction.emoji.name} by ${user.tag} on message ${reaction.message.id}`);
         
+        // Ignore bot reactions to prevent infinite loops and unintended role assignments
         if (this.bot.getUserValidator().isBot(user)) {
             console.log('Ignoring bot reaction');
             return;
         }
 
+        // Process reactions through both systems simultaneously for comprehensive handling
+        // Legacy reaction role system for configured messages + new proposal system
         await Promise.all([
-            this.handleReaction(reaction, user, 'remove'),
-            this.handleProposalReaction(reaction, user, 'remove')
+            this.handleReaction(reaction, user, type),
+            this.handleProposalReaction(reaction, user, type)
         ]);
     }
 
+    // Handle reactions specifically for the proposal/voting system
+    // Manages support reactions in debate channels and voting reactions in vote channels
     async handleProposalReaction(reaction, user, type) {
         try {
             console.log(`handleProposalReaction: ${reaction.emoji.name} ${type} by ${user.tag} on message ${reaction.message.id}`);
             
-            // Fetch partial reactions/messages
+            // Ensure we have complete reaction and message data
+            // Discord sometimes provides partial objects that need to be fetched
             if (reaction.partial) {
                 await reaction.fetch();
             }
@@ -51,7 +54,8 @@ class EventHandlers {
             const message = reaction.message;
             const emoji = reaction.emoji.name;
 
-            // Check if this is in the correct guild
+            // Verify this reaction is in the correct Discord server
+            // Prevents cross-server interference if bot serves multiple guilds
             if (message.guild?.id !== this.bot.getGuildId()) {
                 console.log(`Wrong guild: ${message.guild?.id} vs ${this.bot.getGuildId()}`);
                 return;
@@ -59,37 +63,17 @@ class EventHandlers {
 
             console.log(`Message channel: ${message.channel.id}`);
             
-            // Check if this is a monitored proposal channel
-            const isProposalChannel = this.bot.getProposalManager().proposalConfig && 
-                Object.values(this.bot.getProposalManager().proposalConfig).some(config => 
-                    config.debateChannelId === message.channel.id || config.voteChannelId === message.channel.id
-                );
-
-            if (isProposalChannel) {
-                console.log('Message is in a monitored proposal channel');
+            const channelType = this.getProposalChannelType(message.channel.id);
+            
+            if (channelType) {
+                console.log(`Message is in a monitored ${channelType} channel`);
                 
-                // Handle support reactions in any debate channel
-                if (emoji === '✅') {
-                    const isDebateChannel = Object.values(this.bot.getProposalManager().proposalConfig).some(config => 
-                        config.debateChannelId === message.channel.id
-                    );
-                    
-                    if (isDebateChannel) {
-                        console.log('Processing support reaction in debate channel');
-                        await this.handleSupportReaction(message);
-                    }
-                }
-                
-                // Handle voting reactions in any vote channel
-                if (emoji === '✅' || emoji === '❌') {
-                    const isVoteChannel = Object.values(this.bot.getProposalManager().proposalConfig).some(config => 
-                        config.voteChannelId === message.channel.id
-                    );
-                    
-                    if (isVoteChannel) {
-                        console.log('Processing vote reaction in vote channel');
-                        await this.handleVotingReaction(message, emoji, type);
-                    }
+                if (channelType === 'debate' && emoji === '✅') {
+                    console.log('Processing support reaction in debate channel');
+                    await this.handleSupportReaction(message);
+                } else if (channelType === 'vote' && (emoji === '✅' || emoji === '❌')) {
+                    console.log('Processing vote reaction in vote channel');
+                    await this.handleVotingReaction(message, emoji, type);
                 }
             } else {
                 console.log(`Reaction not in monitored proposal channels. Channel: ${message.channel.id}, Emoji: ${emoji}`);
@@ -100,23 +84,39 @@ class EventHandlers {
         }
     }
 
+    // Helper method to determine what type of proposal channel this is
+    getProposalChannelType(channelId) {
+        const proposalConfig = this.bot.getProposalManager().proposalConfig;
+        if (!proposalConfig) return null;
+
+        for (const config of Object.values(proposalConfig)) {
+            if (config.debateChannelId === channelId) return 'debate';
+            if (config.voteChannelId === channelId) return 'vote';
+            if (config.resolutionsChannelId === channelId) return 'resolutions';
+        }
+        return null;
+    }
+
+    // Process support reactions that could advance proposals to voting
+    // Counts ✅ reactions and forwards to proposal manager for threshold checking
     async handleSupportReaction(message) {
         try {
             console.log(`handleSupportReaction called for message ${message.id} in channel ${message.channel.id}`);
             
-            // Get the ✅ reaction
+            // Get the ✅ reaction object from Discord's cache
             const supportReaction = message.reactions.cache.get('✅');
             if (!supportReaction) {
                 console.log('No ✅ reaction found on message');
                 return;
             }
 
-            // Count support reactions (excluding bot's own reaction)
+            // Calculate actual user support count by excluding the bot's own reaction
+            // Bot automatically adds reactions to vote messages, so we subtract those
             const supportCount = Math.max(0, supportReaction.count - (supportReaction.me ? 1 : 0));
             
             console.log(`Support reaction count for message ${message.id}: ${supportCount} (total: ${supportReaction.count}, bot reacted: ${supportReaction.me})`);
 
-            // Always call the proposal manager, let it decide if it should process
+            // Delegate to proposal manager for threshold evaluation and advancement logic
             await this.bot.getProposalManager().handleSupportReaction(message, supportCount);
 
         } catch (error) {
@@ -182,21 +182,26 @@ class EventHandlers {
         }
     }
 
+    // Process all incoming messages for bot commands
+    // Filters for command prefix and authorized channels before processing
     async handleMessage(message) {
         console.log(`Message received: "${message.content}" in channel ${message.channel.id} by ${message.author.tag}`);
         
+        // Ignore messages from bots to prevent command loops and spam
         if (this.bot.getUserValidator().isBot(message.author)) {
             console.log('Ignoring bot message');
             return;
         }
 
-        // Check if message starts with !
+        // Only process messages that start with command prefix
+        // This prevents the bot from responding to normal conversation
         if (!message.content.startsWith('!')) {
             console.log('Message does not start with !, ignoring');
             return;
         }
 
-        // Check if message is in a command channel (either moderator or member)
+        // Restrict command processing to designated command channels
+        // This keeps bot interactions organized and prevents spam in other channels
         const isModeratorChannel = message.channel.id === this.bot.getCommandChannelId();
         const isMemberChannel = message.channel.id === this.bot.getMemberCommandChannelId();
         

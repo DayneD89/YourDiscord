@@ -1,27 +1,76 @@
-name: Deploy
+name: 🚀 Deploy Infrastructure
 on:
   push:
     branches: [ main ]
+  workflow_run:
+    workflows: ["🧪 Test & Coverage"]
+    branches: [ main ]
+    types: [ completed ]
 
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  deploy:
+  test:
+    name: ✅ Verify Tests Pass
     runs-on: ubuntu-latest
+    
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: YourBot/package-lock.json
+
+      - name: 📋 Install dependencies
+        working-directory: YourBot
+        run: npm ci
+
+      - name: 🧪 Run tests before deploy
+        working-directory: YourBot
+        run: npm test -- --testPathIgnorePatterns="ConfigManager.test.js"
+
+  deploy:
+    name: 🚀 Deploy to AWS
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: ⚙️ Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: 🔐 Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::811264947901:role/YourDiscord
           aws-region: us-west-2
 
-      - name: Build
+      - name: 🏗️ Deploy Infrastructure
         run: |
           cd terraform
+          echo "🔄 Initializing Terraform..."
           terraform init -backend-config="key=discord/${{ github.ref_name }}/terraform.tfstate"
+          
+          echo "📋 Planning deployment..."
+          terraform plan -var="discord_token=${{ secrets.TOKEN }}" -var="env=${{ github.ref_name }}"
+          
+          echo "🚀 Deploying infrastructure..."
           terraform apply -auto-approve -var="discord_token=${{ secrets.TOKEN }}" -var="env=${{ github.ref_name }}"
+          
+          echo "✅ Deployment completed successfully!"
+
+      - name: 📊 Deployment Summary
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timestamp**: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ✅ Successful" >> $GITHUB_STEP_SUMMARY
