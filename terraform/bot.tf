@@ -121,9 +121,25 @@ locals {
 
 data "archive_file" "bot_code" {
   type        = "zip"
-  source_dir  = "${path.module}/../YourBot"
   output_path = "${path.module}/../bundle-${var.env}.zip"
-  excludes    = ["node_modules", "package-lock.json"]
+  
+  source {
+    content  = file("${path.module}/../YourBot/bot.js")
+    filename = "bot.js"
+  }
+  
+  source {
+    content  = file("${path.module}/../YourBot/package.json")
+    filename = "package.json"
+  }
+  
+  dynamic "source" {
+    for_each = fileset("${path.module}/../YourBot/src", "*.js")
+    content {
+      content  = file("${path.module}/../YourBot/src/${source.value}")
+      filename = "src/${source.value}"
+    }
+  }
 }
 
 resource "aws_s3_object" "bot_code" {
