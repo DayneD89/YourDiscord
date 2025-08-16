@@ -31,14 +31,23 @@ jobs:
       - name: 📋 Cache dependencies
         uses: actions/cache@v3
         with:
-          path: YourBot/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('YourBot/package-lock.json') }}
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('YourBot/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            ${{ runner.os }}-npm-
 
       - name: 📋 Install dependencies
         working-directory: YourBot
-        run: npm install
+        run: |
+          # Check if package-lock.json exists and is valid
+          if [ -f "package-lock.json" ]; then
+            echo "✅ package-lock.json found"
+            cat package-lock.json | head -10
+            npm ci
+          else
+            echo "❌ package-lock.json not found, using npm install"
+            npm install
+          fi
 
       - name: 🧪 Run tests
         working-directory: YourBot
@@ -215,14 +224,23 @@ jobs:
       - name: 📋 Cache dependencies
         uses: actions/cache@v3
         with:
-          path: YourBot/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('YourBot/package-lock.json') }}
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('YourBot/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            ${{ runner.os }}-npm-
 
       - name: 📋 Install dependencies
         working-directory: YourBot
-        run: npm install
+        run: |
+          # Check if package-lock.json exists and is valid
+          if [ -f "package-lock.json" ]; then
+            echo "✅ package-lock.json found"
+            cat package-lock.json | head -10
+            npm ci
+          else
+            echo "❌ package-lock.json not found, using npm install"
+            npm install
+          fi
 
       - name: 📊 Generate coverage HTML report
         working-directory: YourBot
