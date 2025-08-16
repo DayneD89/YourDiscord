@@ -67,44 +67,62 @@ jobs:
       - name: 🎯 Check Coverage Threshold
         working-directory: YourBot
         run: |
-          # Extract coverage percentage from Jest output
-          COVERAGE_OUTPUT=$(npm run test:coverage -- --testPathIgnorePatterns="ConfigManager.test.js" --silent)
+          # Generate coverage report with text summary
+          npm run test:coverage -- --testPathIgnorePatterns="ConfigManager.test.js" --coverageReporters=text-summary
           
-          # Parse the coverage summary to get overall percentage
-          COVERAGE_LINES=$(echo "$COVERAGE_OUTPUT" | grep -A 10 "All files" | grep "All files" | awk '{print $4}' | sed 's/%//')
-          COVERAGE_FUNCTIONS=$(echo "$COVERAGE_OUTPUT" | grep -A 10 "All files" | grep "All files" | awk '{print $3}' | sed 's/%//')
-          COVERAGE_BRANCHES=$(echo "$COVERAGE_OUTPUT" | grep -A 10 "All files" | grep "All files" | awk '{print $2}' | sed 's/%//')
-          COVERAGE_STATEMENTS=$(echo "$COVERAGE_OUTPUT" | grep -A 10 "All files" | grep "All files" | awk '{print $1}' | sed 's/%//')
+          # Extract coverage from the text summary output
+          COVERAGE_OUTPUT=$(npm run test:coverage -- --testPathIgnorePatterns="ConfigManager.test.js" --coverageReporters=text-summary --silent 2>/dev/null || true)
           
-          echo "📊 Coverage Report:"
+          echo "Raw coverage output:"
+          echo "$COVERAGE_OUTPUT"
+          
+          # Try to extract coverage percentages more robustly
+          STATEMENTS_LINE=$(echo "$COVERAGE_OUTPUT" | grep -E "Statements\s*:\s*[0-9]+(\.[0-9]+)?%" | head -1)
+          BRANCHES_LINE=$(echo "$COVERAGE_OUTPUT" | grep -E "Branches\s*:\s*[0-9]+(\.[0-9]+)?%" | head -1)
+          FUNCTIONS_LINE=$(echo "$COVERAGE_OUTPUT" | grep -E "Functions\s*:\s*[0-9]+(\.[0-9]+)?%" | head -1)
+          LINES_LINE=$(echo "$COVERAGE_OUTPUT" | grep -E "Lines\s*:\s*[0-9]+(\.[0-9]+)?%" | head -1)
+          
+          # Extract just the percentage numbers
+          COVERAGE_STATEMENTS=$(echo "$STATEMENTS_LINE" | grep -oE "[0-9]+(\.[0-9]+)?%" | sed 's/%//' | head -1)
+          COVERAGE_BRANCHES=$(echo "$BRANCHES_LINE" | grep -oE "[0-9]+(\.[0-9]+)?%" | sed 's/%//' | head -1)
+          COVERAGE_FUNCTIONS=$(echo "$FUNCTIONS_LINE" | grep -oE "[0-9]+(\.[0-9]+)?%" | sed 's/%//' | head -1)
+          COVERAGE_LINES=$(echo "$LINES_LINE" | grep -oE "[0-9]+(\.[0-9]+)?%" | sed 's/%//' | head -1)
+          
+          # Set defaults if parsing failed
+          COVERAGE_STATEMENTS=${COVERAGE_STATEMENTS:-0}
+          COVERAGE_BRANCHES=${COVERAGE_BRANCHES:-0}
+          COVERAGE_FUNCTIONS=${COVERAGE_FUNCTIONS:-0}
+          COVERAGE_LINES=${COVERAGE_LINES:-0}
+          
+          echo "📊 Parsed Coverage Report:"
           echo "- Statements: ${COVERAGE_STATEMENTS}%"
           echo "- Branches: ${COVERAGE_BRANCHES}%"
           echo "- Functions: ${COVERAGE_FUNCTIONS}%"
           echo "- Lines: ${COVERAGE_LINES}%"
           
           # Check if all coverage metrics meet the global threshold
-          # Individual modules have stricter requirements via Jest config
           STATEMENTS_THRESHOLD=60
           BRANCHES_THRESHOLD=65
           FUNCTIONS_THRESHOLD=75
           LINES_THRESHOLD=60
           
-          if (( $(echo "$COVERAGE_STATEMENTS < $STATEMENTS_THRESHOLD" | bc -l) )); then
+          # Use arithmetic comparison instead of bc for better compatibility
+          if (( $(echo "$COVERAGE_STATEMENTS < $STATEMENTS_THRESHOLD" | awk '{print ($1 < $3)}') )); then
             echo "❌ Statement coverage ${COVERAGE_STATEMENTS}% is below ${STATEMENTS_THRESHOLD}% threshold"
             exit 1
           fi
           
-          if (( $(echo "$COVERAGE_BRANCHES < $BRANCHES_THRESHOLD" | bc -l) )); then
+          if (( $(echo "$COVERAGE_BRANCHES < $BRANCHES_THRESHOLD" | awk '{print ($1 < $3)}') )); then
             echo "❌ Branch coverage ${COVERAGE_BRANCHES}% is below ${BRANCHES_THRESHOLD}% threshold"
             exit 1
           fi
           
-          if (( $(echo "$COVERAGE_FUNCTIONS < $FUNCTIONS_THRESHOLD" | bc -l) )); then
+          if (( $(echo "$COVERAGE_FUNCTIONS < $FUNCTIONS_THRESHOLD" | awk '{print ($1 < $3)}') )); then
             echo "❌ Function coverage ${COVERAGE_FUNCTIONS}% is below ${FUNCTIONS_THRESHOLD}% threshold"
             exit 1
           fi
           
-          if (( $(echo "$COVERAGE_LINES < $LINES_THRESHOLD" | bc -l) )); then
+          if (( $(echo "$COVERAGE_LINES < $LINES_THRESHOLD" | awk '{print ($1 < $3)}') )); then
             echo "❌ Line coverage ${COVERAGE_LINES}% is below ${LINES_THRESHOLD}% threshold"
             exit 1
           fi
