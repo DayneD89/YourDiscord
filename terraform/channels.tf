@@ -75,6 +75,7 @@ locals {
             name = "governance-links"
             key = "governance_links"
             topic = "Links to governance resources"
+            messages = ["contributing_guide"]
           },
           {
             name = "governance-debate"
@@ -323,6 +324,11 @@ resource "discord_message" "rules_summary" {
 resource "discord_message" "channel_guide" {
   channel_id = discord_text_channel.channels["rules_and_guide"].id
   content    = file("${path.module}/messages/channel_guide.md")
+}
+
+resource "discord_message" "contributing_guide" {
+  channel_id = discord_text_channel.channels["governance_links"].id
+  content    = file("${path.module}/messages/contributing_guide.md")
 }
 
 # Regional & Local (unchanged, positioned at end)
