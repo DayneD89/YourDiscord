@@ -118,6 +118,9 @@ locals {
     moderator_role_id  = discord_role.moderator.id
     member_role_id     = discord_role.member.id
     command_channel_id = local.channels["governance_bot"]
+    debate_channel_id  = local.channels["members_debate"]
+    vote_channel_id    = local.channels["members_vote"]
+    resolutions_channel_id  = local.channels["members_resolutions"]
     s3_bucket          = aws_s3_object.bot_code.bucket
     s3_key             = aws_s3_object.bot_code.key
     code_hash          = data.archive_file.bot_code.output_md5
@@ -177,6 +180,10 @@ resource "aws_instance" "bot" {
   }
 
   depends_on = [ aws_s3_object.bot_code ]
+  
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_cloudwatch_log_group" "bot" {

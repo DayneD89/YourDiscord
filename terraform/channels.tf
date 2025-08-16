@@ -50,6 +50,7 @@ locals {
             name = "members-debate"
             key = "members_debate"
             topic = "Propose and debate resolutions"
+            messages = ["proposal_guide"]
           },
           {
             name = "members-vote"
