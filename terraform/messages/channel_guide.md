@@ -9,6 +9,8 @@
 • #members-resolutions - Passed resolutions and policies
 • #members-debate - Policy proposals and open discussion
 • #members-vote - Active votes on proposals
+• #members-memes - MeeMees
+• #members-bot - Bot commands
 
 **⚖️ Governance (Open Discussion Policy):**
 • #governance-links - Important governance resources

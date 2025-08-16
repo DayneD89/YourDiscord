@@ -58,23 +58,41 @@ class EventHandlers {
             }
 
             console.log(`Message channel: ${message.channel.id}`);
-            console.log(`Debate channel: ${this.bot.getDebateChannelId()}`);
-            console.log(`Vote channel: ${this.bot.getVoteChannelId()}`);
+            
+            // Check if this is a monitored proposal channel
+            const isProposalChannel = this.bot.getProposalManager().proposalConfig && 
+                Object.values(this.bot.getProposalManager().proposalConfig).some(config => 
+                    config.debateChannelId === message.channel.id || config.voteChannelId === message.channel.id
+                );
 
-            // Handle support reactions in debate channel
-            if (message.channel.id === this.bot.getDebateChannelId() && emoji === '✅') {
-                console.log('Processing support reaction in debate channel');
-                await this.handleSupportReaction(message);
-            }
-            
-            // Handle voting reactions in vote channel
-            else if (message.channel.id === this.bot.getVoteChannelId() && (emoji === '✅' || emoji === '❌')) {
-                console.log('Processing vote reaction in vote channel');
-                await this.handleVotingReaction(message, emoji, type);
-            }
-            
-            else {
-                console.log(`Reaction not in monitored channels or wrong emoji. Channel: ${message.channel.id}, Emoji: ${emoji}`);
+            if (isProposalChannel) {
+                console.log('Message is in a monitored proposal channel');
+                
+                // Handle support reactions in any debate channel
+                if (emoji === '✅') {
+                    const isDebateChannel = Object.values(this.bot.getProposalManager().proposalConfig).some(config => 
+                        config.debateChannelId === message.channel.id
+                    );
+                    
+                    if (isDebateChannel) {
+                        console.log('Processing support reaction in debate channel');
+                        await this.handleSupportReaction(message);
+                    }
+                }
+                
+                // Handle voting reactions in any vote channel
+                if (emoji === '✅' || emoji === '❌') {
+                    const isVoteChannel = Object.values(this.bot.getProposalManager().proposalConfig).some(config => 
+                        config.voteChannelId === message.channel.id
+                    );
+                    
+                    if (isVoteChannel) {
+                        console.log('Processing vote reaction in vote channel');
+                        await this.handleVotingReaction(message, emoji, type);
+                    }
+                }
+            } else {
+                console.log(`Reaction not in monitored proposal channels. Channel: ${message.channel.id}, Emoji: ${emoji}`);
             }
 
         } catch (error) {
@@ -85,7 +103,6 @@ class EventHandlers {
     async handleSupportReaction(message) {
         try {
             console.log(`handleSupportReaction called for message ${message.id} in channel ${message.channel.id}`);
-            console.log(`Expected debate channel: ${this.bot.getDebateChannelId()}`);
             
             // Get the ✅ reaction
             const supportReaction = message.reactions.cache.get('✅');
@@ -173,20 +190,23 @@ class EventHandlers {
             return;
         }
 
-        // Check if message is in the command channel
-        if (message.channel.id !== this.bot.getCommandChannelId()) {
-            console.log(`Message not in command channel (${this.bot.getCommandChannelId()}), ignoring`);
-            return;
-        }
-
         // Check if message starts with !
         if (!message.content.startsWith('!')) {
             console.log('Message does not start with !, ignoring');
             return;
         }
 
-        console.log(`Processing command from ${message.author.tag}: "${message.content}"`);
-        await this.bot.commandHandler.handleCommand(message);
+        // Check if message is in a command channel (either moderator or member)
+        const isModeratorChannel = message.channel.id === this.bot.getCommandChannelId();
+        const isMemberChannel = message.channel.id === this.bot.getMemberCommandChannelId();
+        
+        if (!isModeratorChannel && !isMemberChannel) {
+            console.log(`Message not in command channels (mod: ${this.bot.getCommandChannelId()}, member: ${this.bot.getMemberCommandChannelId()}), ignoring`);
+            return;
+        }
+
+        console.log(`Processing command from ${message.author.tag}: "${message.content}" in ${isModeratorChannel ? 'moderator' : 'member'} channel`);
+        await this.bot.commandHandler.handleCommand(message, isModeratorChannel);
     }
 }
 

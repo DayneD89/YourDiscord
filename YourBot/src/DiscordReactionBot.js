@@ -26,9 +26,7 @@ class DiscordReactionBot {
         this.moderatorRoleId = null;
         this.memberRoleId = null;
         this.commandChannelId = null;
-        this.debateChannelId = null;
-        this.voteChannelId = null;
-        this.resolutionsChannelId = null;
+        this.memberCommandChannelId = null;
         
         // Initialize managers
         this.configManager = new ConfigManager();
@@ -51,15 +49,12 @@ class DiscordReactionBot {
             this.moderatorRoleId = runtimeConfig.moderatorRoleId;
             this.memberRoleId = runtimeConfig.memberRoleId;
             this.commandChannelId = runtimeConfig.commandChannelId;
-            this.debateChannelId = runtimeConfig.debateChannelId;
-            this.voteChannelId = runtimeConfig.voteChannelId;
-            this.resolutionsChannelId = runtimeConfig.resolutionsChannelId;
+            this.memberCommandChannelId = runtimeConfig.memberCommandChannelId;
 
             console.log(`Guild ID: ${this.guildId}`);
-            console.log(`Command Channel ID: ${this.commandChannelId}`);
-            console.log(`Debate Channel ID: ${this.debateChannelId}`);
-            console.log(`Vote Channel ID: ${this.voteChannelId}`);
-            console.log(`Resolutions Channel ID: ${this.resolutionsChannelId}`);
+            console.log(`Moderator Command Channel ID: ${this.commandChannelId}`);
+            console.log(`Member Command Channel ID: ${this.memberCommandChannelId}`);
+            console.log(`Proposal config loaded with types:`, Object.keys(runtimeConfig.proposalConfig || {}));
 
             // Initialize config manager
             await this.configManager.initialize(
@@ -71,7 +66,8 @@ class DiscordReactionBot {
             // Initialize proposal manager
             await this.proposalManager.initialize(
                 runtimeConfig.s3Bucket,
-                this.guildId
+                this.guildId,
+                runtimeConfig.proposalConfig
             );
 
             // Login to Discord
@@ -88,21 +84,28 @@ class DiscordReactionBot {
         this.client.once('ready', async () => {
             console.log(`Bot logged in as ${this.client.user.tag}`);
             console.log(`Monitoring guild: ${this.guildId}`);
-            console.log(`Command channel: ${this.commandChannelId}`);
-            console.log(`Debate channel: ${this.debateChannelId}`);
-            console.log(`Vote channel: ${this.voteChannelId}`);
-            console.log(`Resolutions channel: ${this.resolutionsChannelId}`);
+            console.log(`Moderator command channel: ${this.commandChannelId}`);
+            console.log(`Member command channel: ${this.memberCommandChannelId}`);
             console.log(`Moderator role ID: ${this.moderatorRoleId}`);
             console.log(`Member role ID: ${this.memberRoleId}`);
             
+            // Log proposal configuration
+            if (this.proposalManager.proposalConfig) {
+                console.log('Proposal types configured:');
+                Object.entries(this.proposalManager.proposalConfig).forEach(([type, config]) => {
+                    console.log(`  ${type}: ${config.supportThreshold} reactions, ${config.voteDuration}ms duration`);
+                    console.log(`    Debate: ${config.debateChannelId}, Vote: ${config.voteChannelId}, Resolutions: ${config.resolutionsChannelId}`);
+                });
+            }
+            
             const currentConfig = this.configManager.getConfig();
-            console.log(`Configurations loaded: ${currentConfig.length}`);
+            console.log(`Reaction configurations loaded: ${currentConfig.length}`);
             
             const activeVotes = this.proposalManager.getActiveVotes();
             console.log(`Active votes: ${activeVotes.length}`);
             
             if (currentConfig.length > 0) {
-                console.log('Current configurations:');
+                console.log('Current reaction configurations:');
                 currentConfig.forEach((cfg, index) => {
                     console.log(`  ${index + 1}: Message ${cfg.from}, Action ${cfg.action}`);
                 });
@@ -157,9 +160,7 @@ class DiscordReactionBot {
     getModeratorRoleId() { return this.moderatorRoleId; }
     getMemberRoleId() { return this.memberRoleId; }
     getCommandChannelId() { return this.commandChannelId; }
-    getDebateChannelId() { return this.debateChannelId; }
-    getVoteChannelId() { return this.voteChannelId; }
-    getResolutionsChannelId() { return this.resolutionsChannelId; }
+    getMemberCommandChannelId() { return this.memberCommandChannelId; }
     getConfig() { return this.configManager.getConfig(); }
     getConfigManager() { return this.configManager; }
     getProposalManager() { return this.proposalManager; }
@@ -175,39 +176,33 @@ class DiscordReactionBot {
             return;
         }
 
-        for (const cfg of config) {
-            const messageId = cfg.from;
+        // Get unique message IDs to avoid duplicates
+        const uniqueMessageIds = [...new Set(config.map(cfg => cfg.from))];
+        console.log(`Found ${uniqueMessageIds.length} unique messages to cache from ${config.length} configs`);
+
+        for (const messageId of uniqueMessageIds) {
             let messageFound = false;
 
             console.log(`🔍 Searching for message ${messageId}...`);
 
-            const uniqueMessageIds = [...new Set(config.map(cfg => cfg.from))];
-            console.log(`Found ${uniqueMessageIds.length} unique messages to cache from ${config.length} configs`);
-
-            for (const messageId of uniqueMessageIds) {
-                let messageFound = false;
-
-                console.log(`🔍 Searching for message ${messageId}...`);
-
-                // Search through all text channels
-                for (const [channelId, channel] of guild.channels.cache) {
-                    if (channel.isTextBased()) {
-                        try {
-                            const message = await channel.messages.fetch(messageId);
-                            if (message) {
-                                console.log(`✅ Cached message ${messageId} from #${channel.name}`);
-                                messageFound = true;
-                                break;
-                            }
-                        } catch (err) {
-                            // Message not in this channel, continue
+            // Search through all text channels
+            for (const [channelId, channel] of guild.channels.cache) {
+                if (channel.isTextBased()) {
+                    try {
+                        const message = await channel.messages.fetch(messageId);
+                        if (message) {
+                            console.log(`✅ Cached message ${messageId} from #${channel.name}`);
+                            messageFound = true;
+                            break;
                         }
+                    } catch (err) {
+                        // Message not in this channel, continue
                     }
                 }
+            }
 
-                if (!messageFound) {
-                    console.log(`⚠️  Message ${messageId} not found in any channel`);
-                }
+            if (!messageFound) {
+                console.log(`⚠️  Message ${messageId} not found in any channel`);
             }
         }
         

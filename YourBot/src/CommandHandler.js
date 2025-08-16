@@ -3,9 +3,9 @@ class CommandHandler {
         this.bot = bot;
     }
 
-    async handleCommand(message) {
+    async handleCommand(message, isModeratorChannel = false) {
         try {
-            console.log(`Handling command from ${message.author.tag}`);
+            console.log(`Handling command from ${message.author.tag} in ${isModeratorChannel ? 'moderator' : 'member'} channel`);
             
             const guild = message.guild;
             const member = guild.members.cache.get(message.author.id);
@@ -16,41 +16,75 @@ class CommandHandler {
                 return;
             }
 
-            // Check if user can use moderator commands
-            if (!this.bot.getUserValidator().canUseModerator(member, this.bot.getModeratorRoleId())) {
-                await message.reply('❌ You need the moderator role or "Manage Roles" permission to use bot commands.');
-                return;
-            }
-
             const content = message.content.trim();
             console.log(`Processing command: "${content}"`);
 
-            // Existing config commands
-            if (content.startsWith('!addconfig ')) {
-                await this.handleAddConfig(message, content.substring(11));
-            } else if (content.startsWith('!removeconfig ')) {
-                await this.handleRemoveConfig(message, content.substring(14));
-            } else if (content === '!viewconfig') {
-                await this.handleViewConfig(message);
-            }
-            // New proposal commands
-            else if (content === '!proposals') {
-                await this.handleViewProposals(message);
-            } else if (content === '!activevotes') {
-                await this.handleActiveVotes(message);
-            } else if (content.startsWith('!voteinfo ')) {
-                await this.handleVoteInfo(message, content.substring(10));
-            } else if (content.startsWith('!forcevote ')) {
-                await this.handleForceVote(message, content.substring(11));
-            } else if (content === '!help') {
-                await this.handleHelp(message);
+            // Determine user permissions
+            const isModerator = this.bot.getUserValidator().canUseModerator(member, this.bot.getModeratorRoleId());
+            const isMember = this.bot.getUserValidator().hasRole(member, this.bot.getMemberRoleId());
+
+            // Handle commands based on channel and permissions
+            if (isModeratorChannel) {
+                await this.handleModeratorCommand(message, member, content, isModerator);
             } else {
-                await message.reply('❓ Unknown command. Type `!help` for available commands.');
+                await this.handleMemberCommand(message, member, content, isMember);
             }
 
         } catch (error) {
             console.error('Error handling command:', error);
             await message.reply('❌ An error occurred while processing your command.');
+        }
+    }
+
+    async handleModeratorCommand(message, member, content, isModerator) {
+        // Check if user can use moderator commands
+        if (!isModerator) {
+            await message.reply('❌ You need the moderator role or "Manage Roles" permission to use commands in this channel.');
+            return;
+        }
+
+        // Moderator-only commands
+        if (content.startsWith('!addconfig ')) {
+            await this.handleAddConfig(message, content.substring(11));
+        } else if (content.startsWith('!removeconfig ')) {
+            await this.handleRemoveConfig(message, content.substring(14));
+        } else if (content === '!viewconfig') {
+            await this.handleViewConfig(message);
+        } else if (content.startsWith('!forcevote ')) {
+            await this.handleForceVote(message, content.substring(11));
+        } else if (content === '!help') {
+            await this.handleModeratorHelp(message);
+        }
+        // Shared commands available to moderators
+        else if (content === '!proposals') {
+            await this.handleViewProposals(message);
+        } else if (content === '!activevotes') {
+            await this.handleActiveVotes(message);
+        } else if (content.startsWith('!voteinfo ')) {
+            await this.handleVoteInfo(message, content.substring(10));
+        } else {
+            await message.reply('❓ Unknown moderator command. Type `!help` for available commands.');
+        }
+    }
+
+    async handleMemberCommand(message, member, content, isMember) {
+        // Check if user is a member
+        if (!isMember) {
+            await message.reply('❌ You need the member role to use bot commands.');
+            return;
+        }
+
+        // Member-accessible commands
+        if (content === '!proposals') {
+            await this.handleViewProposals(message);
+        } else if (content === '!activevotes') {
+            await this.handleActiveVotes(message);
+        } else if (content.startsWith('!voteinfo ')) {
+            await this.handleVoteInfo(message, content.substring(10));
+        } else if (content === '!help') {
+            await this.handleMemberHelp(message);
+        } else {
+            await message.reply('❓ Unknown command. Type `!help` for available commands.');
         }
     }
 
@@ -187,8 +221,9 @@ class CommandHandler {
                 const status = this.getStatusEmoji(proposal.status);
                 const author = `<@${proposal.authorId}>`;
                 const content = proposal.content.substring(0, 100) + (proposal.content.length > 100 ? '...' : '');
+                const type = proposal.proposalType ? ` (${proposal.proposalType})` : '';
                 
-                proposalsDisplay += `**${index + 1}.** ${status} ${proposal.status.toUpperCase()}\n`;
+                proposalsDisplay += `**${index + 1}.** ${status} ${proposal.status.toUpperCase()}${type}\n`;
                 proposalsDisplay += `   👤 ${author}\n`;
                 proposalsDisplay += `   📝 ${content}\n`;
                 
@@ -237,8 +272,9 @@ class CommandHandler {
                 const content = vote.content.substring(0, 150) + (vote.content.length > 150 ? '...' : '');
                 const timeLeft = this.getTimeLeft(vote.endTime);
                 const voteLink = `https://discord.com/channels/${this.bot.getGuildId()}/${vote.voteChannelId}/${vote.voteMessageId}`;
+                const type = vote.proposalType ? ` (${vote.proposalType})` : '';
                 
-                votesDisplay += `**${index + 1}.** 👤 ${author}\n`;
+                votesDisplay += `**${index + 1}.** 👤 ${author}${type}\n`;
                 votesDisplay += `   📝 ${content}\n`;
                 votesDisplay += `   🗳️ Current: ✅${vote.yesVotes} ❌${vote.noVotes}\n`;
                 votesDisplay += `   ⏰ ${timeLeft}\n`;
@@ -265,8 +301,9 @@ class CommandHandler {
             const status = this.getStatusEmoji(proposal.status);
             const author = `<@${proposal.authorId}>`;
             const timeLeft = proposal.status === 'voting' ? this.getTimeLeft(proposal.endTime) : 'N/A';
+            const type = proposal.proposalType ? ` (${proposal.proposalType})` : '';
             
-            let infoDisplay = `📊 **Proposal Information**\n\n`;
+            let infoDisplay = `📊 **Proposal Information**${type}\n\n`;
             infoDisplay += `**Status:** ${status} ${proposal.status.toUpperCase()}\n`;
             infoDisplay += `**Author:** ${author}\n`;
             infoDisplay += `**Started:** <t:${Math.floor(Date.parse(proposal.startTime) / 1000)}:F>\n`;
@@ -318,43 +355,70 @@ class CommandHandler {
         }
     }
 
-    async handleHelp(message) {
-        const helpText = `**🤖 Bot Commands** (This channel only, requires moderator role):
+    async handleModeratorHelp(message) {
+        const proposalConfig = this.bot.getProposalManager().proposalConfig;
+        
+        let proposalInfo = '';
+        if (proposalConfig) {
+            proposalInfo = '\n**🗳️ Proposal System:**\nThe bot automatically monitors:\n';
+            Object.entries(proposalConfig).forEach(([type, config]) => {
+                proposalInfo += `- **${type}**: <#${config.debateChannelId}> (${config.supportThreshold} ✅) → <#${config.voteChannelId}> → <#${config.resolutionsChannelId}>\n`;
+                proposalInfo += `  Formats: ${config.formats.map(f => `**${f}**:`).join(', ')}\n`;
+            });
+        }
+
+        const helpText = `**🤖 Moderator Bot Commands**
 
 **Reaction Config Commands:**
 \`!addconfig <json>\` - Add a new reaction config
-Example: \`!addconfig {"from": "123456789", "action": "✅", "to": "AddRole(user_id,'member')", "unto": "RemoveRole(user_id,'member')"}\`
-
 \`!removeconfig <message_id> <action>\` - Remove a config
-Example: \`!removeconfig 123456789 ✅\`
-
 \`!viewconfig\` - View current reaction configuration
 
-**Proposal System Commands:**
+**Proposal Management:**
 \`!proposals\` - View all proposals and their status
 \`!activevotes\` - View currently active votes
 \`!voteinfo <vote_message_id>\` - Get detailed info about a specific vote
-\`!forcevote <vote_message_id>\` - Force end an active vote (emergency use)
+\`!forcevote <vote_message_id>\` - Force end an active vote (emergency)
 
 \`!help\` - Show this help message
 
 **📝 Config Structure:**
-- \`from\`: Message ID to watch for reactions
-- \`action\`: Emoji to react with
-- \`to\`: Action when reaction is added (optional)
-- \`unto\`: Action when reaction is removed (optional)
+\`{"from": "MESSAGE_ID", "action": "EMOJI", "to": "ACTION", "unto": "ACTION"}\`
 
 **⚙️ Available Actions:**
 - \`AddRole(user_id,'role_name')\`
 - \`RemoveRole(user_id,'role_name')\`
+${proposalInfo}
+**💾 Note:** All changes are saved to S3 and persist across restarts.
 
-**🗳️ Proposal System:**
-The bot automatically monitors:
-- <#${this.bot.getDebateChannelId()}> for proposals (5 ✅ reactions moves to vote)
-- <#${this.bot.getVoteChannelId()}> for voting (✅/❌ reactions, 7 days)
-- <#${this.bot.getResolutionsChannelId()}> for passed proposals
+**👥 Members can use \`!proposals\`, \`!activevotes\`, and \`!voteinfo\` in their bot channel.**`;
 
-**💾 Note:** All config changes are automatically saved to S3 and persist across restarts.`;
+        await message.reply(helpText);
+    }
+
+    async handleMemberHelp(message) {
+        const proposalConfig = this.bot.getProposalManager().proposalConfig;
+        
+        let proposalInfo = '';
+        if (proposalConfig) {
+            proposalInfo = '\n**🗳️ How to Participate:**\n';
+            Object.entries(proposalConfig).forEach(([type, config]) => {
+                proposalInfo += `- **${type} proposals**: Post in <#${config.debateChannelId}> using format ${config.formats.map(f => `**${f}**:`).join(' or ')}\n`;
+                proposalInfo += `  Need ${config.supportThreshold} ✅ reactions to advance to voting\n`;
+            });
+            proposalInfo += '\n**Voting**: React ✅ (support) or ❌ (oppose) in vote channels\n';
+        }
+
+        const helpText = `**🤖 Member Bot Commands**
+
+**Proposal Information:**
+\`!proposals\` - View all proposals and their status
+\`!activevotes\` - View currently active votes  
+\`!voteinfo <vote_message_id>\` - Get detailed info about a specific vote
+
+\`!help\` - Show this help message
+${proposalInfo}
+**📋 View passed proposals in the resolutions channels**`;
 
         await message.reply(helpText);
     }

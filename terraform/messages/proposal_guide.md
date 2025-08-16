@@ -1,19 +1,21 @@
-# 📋 Policy Proposal System
+# Policy Proposal System
 
-## 🚀 How It Works
+This system is for proposing **policies our organisation should support** as your party supporters.
+
+## How It Works
 
 **1. Submit Policy** → **2. Get 5 Support Reactions** → **3. Vote for 7 Days** → **4. Official Position**
 
 ---
 
-## 📝 Submit Your Policy Proposal
+## Submit Your Policy Proposal
 
 ### Required Format:
 ```
 **Policy**: Your policy proposal here
 ```
 
-### ✅ Good Examples:
+### Good Examples:
 ```
 **Policy**: Renationalise water utilities to ensure public ownership of essential services.
 
@@ -24,38 +26,39 @@
 **Policy**: Support 4-day working week with no pay reduction for worker wellbeing.
 ```
 
-### ❌ What This Is NOT For:
-- Discord server rules or changes
-- Meeting times or admin matters  
-- Personal issues
+---
+
+## Getting Support
+
+- Your policy needs **5 reactions** to advance to voting
+- Once you reach 5 supporters, the bot moves it to voting automatically
+- The vote runs for **7 days** with support or oppose reactions
 
 ---
 
-## 👍 Getting Support
+## Results
 
-- Your policy needs **5 ✅ reactions** to advance to voting
-- Vote runs for **7 days** with ✅ (support) or ❌ (oppose)
-- More ✅ than ❌ = policy passes and becomes official position
+**Policy Passes**: Becomes an official organisational position, added to our resolutions
 
----
-
-## 🎯 Policy Guidelines
-
-**Think Big**: Address national/international socialist goals
-**Be Clear**: State exactly what we should support or oppose  
-**Stay Focused**: Advance our socialist principles
+**Policy Fails**: Not adopted as official position, can be resubmitted later with modifications
 
 ---
 
-## 📋 Policy Categories
+## Guidelines
 
-- **Economic**: Nationalisation, worker ownership, wealth redistribution
+**Think Nationally/Internationally**: Policies should address broader socialist goals
+
+**Be Clear**: State exactly what you want the organisation to support or oppose
+
+## Policy Categories
+
+- **Economic Justice**: Nationalisation, worker ownership, wealth redistribution
 - **Social Services**: Healthcare, education, housing, transport
-- **Workers' Rights**: Unions, workplace democracy, fair wages  
-- **Environment**: Green New Deal, public utilities
-- **Solidarity**: Support for marginalized communities
-- **International**: Global socialist movements
+- **Workers' Rights**: Union support, workplace democracy, fair wages
+- **Environmental**: Green New Deal, public ownership of utilities
+- **Anti-Oppression**: Solidarity with marginalized communities
+- **International**: Solidarity with global socialist movements
 
 ---
 
-Ready to propose? Format: **Policy**: Your proposal here
+Ready to propose? Use the format: **Policy**: Your proposal here

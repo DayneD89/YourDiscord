@@ -49,9 +49,8 @@ cat > runtime.config.json <<JSON
   "moderatorRoleId": "${moderator_role_id}",
   "memberRoleId": "${member_role_id}",
   "commandChannelId": "${command_channel_id}",
-  "debateChannelId": "${debate_channel_id}",
-  "voteChannelId": "${vote_channel_id}",
-  "resolutionsChannelId": "${resolutions_channel_id}",
+  "memberCommandChannelId": "${member_command_channel_id}",
+  "proposalConfig": ${proposalConfig},
   "s3Bucket": "${s3_bucket}",
   "config": ${config}
 }
