@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: YourBot/package-lock.json
+          cache-dependency-path: './YourBot/package-lock.json'
 
       - name: 📋 Install dependencies
         working-directory: YourBot
@@ -186,7 +186,7 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: YourBot/package-lock.json
+          cache-dependency-path: './YourBot/package-lock.json'
 
       - name: 📋 Install dependencies
         working-directory: YourBot
