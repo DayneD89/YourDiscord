@@ -20,7 +20,7 @@ output server {
   value = discord_server.server.id
 }
 output welcome {
-  value = discord_message.welcome.id
+  value = local.messages["welcome_start_here_welcome_message"]
 }
 output member {
   value = discord_role.member.id

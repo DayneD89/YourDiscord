@@ -2,7 +2,7 @@
 
 To join the server and gain access to all channels:
 
-1. Read the server rules in <#${rules_channel_id}>
+1. Read the server rules in #rules-and-guide
 2. Click the ✅ reaction below to confirm you agree to the rules and that you're a supporter
 3. You'll automatically receive access to member channels
 

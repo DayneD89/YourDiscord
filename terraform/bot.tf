@@ -56,6 +56,11 @@ resource "aws_iam_role_policy_attachment" "ec2_attach" {
   policy_arn = aws_iam_policy.ec2_policy.arn
 }
 
+resource "aws_iam_role_policy_attachment" "cwagent" {
+  role       = aws_iam_role.ec2.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
+
 data "aws_ami" "al2023_arm" {
   most_recent = true
   owners      = ["amazon"]
@@ -68,7 +73,7 @@ data "aws_ami" "al2023_arm" {
 locals {
   base_reaction_rules = [
     {
-      from   = discord_message.welcome.id
+      from   = local.messages["welcome_start_here_welcome_message"]
       action = "✅"
       to     = "AddRole(user_id,'member')"
       unto   = "RemoveRole(user_id,'member')"
@@ -77,7 +82,7 @@ locals {
   
   region_reaction_rules = [
     for i, r in local.region_objs : {
-      from   = discord_message.region_picker.id
+      from   = local.messages["welcome_start_here_region_picker"]
       action = local.emoji_pool[i]
       to     = format("AddRole(user_id,'%s')", r.name)
       unto   = format("RemoveRole(user_id,'%s')", r.name)
@@ -87,7 +92,7 @@ locals {
   town_reaction_rules = flatten([
     for r in local.region_objs : [
       for j, t in r.towns : {
-        from   = discord_message.town_picker[r.key].id
+        from   = local.messages["welcome_start_here_town_picker_${r.key}"]
         action = local.emoji_pool[j]
         to     = format("AddRole(user_id,'%s')", t)
         unto   = format("RemoveRole(user_id,'%s')", t)
@@ -107,6 +112,7 @@ locals {
 
 locals {
   user_data = templatefile("${path.module}/user_data.sh.tpl", {
+    name               = local.name
     bot_token          = var.discord_token
     guild_id           = discord_server.server.id
     moderator_role_id  = discord_role.moderator.id
@@ -171,4 +177,9 @@ resource "aws_instance" "bot" {
   }
 
   depends_on = [ aws_s3_object.bot_code ]
+}
+
+resource "aws_cloudwatch_log_group" "bot" {
+  name              = "/ec2/${local.name}-logs"
+  retention_in_days = 7
 }
