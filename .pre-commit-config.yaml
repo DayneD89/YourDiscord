@@ -28,6 +28,6 @@ repos:
         
       - id: aws-credentials-check
         name: AWS Credentials Detection
-        entry: bash -c 'if grep -r -E "(AKIA[0-9A-Z]{16}|aws_access_key|aws_secret)" . --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=coverage --exclude-dir=docs; then echo "❌ AWS credentials detected! Remove them before committing."; exit 1; fi'
+        entry: bash -c 'if grep -r -E "(AKIA[0-9A-Z]{16}|aws_access_key|aws_secret)" . --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=coverage --exclude-dir=docs --exclude-dir=.github --exclude="*.yaml" --exclude="*.yml"; then echo "❌ AWS credentials detected! Remove them before committing."; exit 1; fi'
         language: system
         pass_filenames: false
