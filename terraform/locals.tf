@@ -14,6 +14,160 @@ locals {
         "Berwick-upon-Tweed",
         "Blyth/Ashington/Morpeth"
       ]
+    },
+    "North West" = {
+      towns = [
+        "Manchester",
+        "Liverpool",
+        "Preston",
+        "Blackpool",
+        "Bolton",
+        "Oldham",
+        "Stockport",
+        "Warrington",
+        "Blackburn",
+        "Burnley"
+      ]
+    },
+    "Yorkshire and Humber" = {
+      towns = [
+        "Leeds",
+        "Sheffield",
+        "Bradford",
+        "Hull",
+        "York",
+        "Wakefield",
+        "Huddersfield",
+        "Doncaster",
+        "Rotherham",
+        "Barnsley"
+      ]
+    },
+    "East Midlands" = {
+      towns = [
+        "Nottingham",
+        "Leicester",
+        "Derby",
+        "Lincoln",
+        "Northampton",
+        "Mansfield",
+        "Chesterfield",
+        "Kettering",
+        "Wellingborough",
+        "Corby"
+      ]
+    },
+    "West Midlands" = {
+      towns = [
+        "Birmingham",
+        "Coventry",
+        "Wolverhampton",
+        "Stoke-on-Trent",
+        "Dudley",
+        "Walsall",
+        "West Bromwich",
+        "Solihull",
+        "Worcester",
+        "Hereford"
+      ]
+    },
+    "East of England" = {
+      towns = [
+        "Norwich",
+        "Cambridge",
+        "Luton",
+        "Southend-on-Sea",
+        "Peterborough",
+        "Ipswich",
+        "Colchester",
+        "Chelmsford",
+        "Watford",
+        "St Albans"
+      ]
+    },
+    "London" = {
+      towns = [
+        "Central London",
+        "North London",
+        "South London",
+        "East London",
+        "West London",
+        "Croydon",
+        "Bromley",
+        "Barnet",
+        "Ealing",
+        "Enfield"
+      ]
+    },
+    "South East" = {
+      towns = [
+        "Brighton",
+        "Reading",
+        "Oxford",
+        "Canterbury",
+        "Guildford",
+        "Maidstone",
+        "Basingstoke",
+        "Crawley",
+        "Slough",
+        "High Wycombe"
+      ]
+    },
+    "South West" = {
+      towns = [
+        "Bristol",
+        "Plymouth",
+        "Exeter",
+        "Bath",
+        "Gloucester",
+        "Cheltenham",
+        "Swindon",
+        "Bournemouth",
+        "Poole",
+        "Taunton"
+      ]
+    },
+    "Wales" = {
+      towns = [
+        "Cardiff",
+        "Swansea",
+        "Newport",
+        "Wrexham",
+        "Merthyr Tydfil",
+        "Barry",
+        "Caerphilly",
+        "Neath",
+        "Port Talbot",
+        "Rhondda"
+      ]
+    },
+    "Scotland" = {
+      towns = [
+        "Glasgow",
+        "Edinburgh",
+        "Aberdeen",
+        "Dundee",
+        "Stirling",
+        "Perth",
+        "Inverness",
+        "Kirkcaldy",
+        "Ayr",
+        "Greenock"
+      ]
+    },
+    "Northern Ireland" = {
+      towns = [
+        "Belfast",
+        "Derry/Londonderry",
+        "Lisburn",
+        "Newry",
+        "Carrickfergus",
+        "Coleraine",
+        "Ballymena",
+        "Newtownabbey",
+        "Bangor",
+        "Craigavon"
+     ]
     }
   }
 
