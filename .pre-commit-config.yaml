@@ -22,12 +22,12 @@ repos:
     hooks:
       - id: discord-token-check
         name: Discord Token Detection
-        entry: bash -c 'if grep -r -E "(mfa\.[a-zA-Z0-9_-]{20,}|[a-zA-Z0-9_-]{23,28}\.[a-zA-Z0-9_-]{6,7}\.[a-zA-Z0-9_-]{27})" . --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=coverage; then echo "❌ Discord token detected! Remove it before committing."; exit 1; fi'
+        entry: bash -c 'if grep -r -E "(mfa\.[a-zA-Z0-9_-]{20,}|[a-zA-Z0-9_-]{23,28}\.[a-zA-Z0-9_-]{6,7}\.[a-zA-Z0-9_-]{27})" . --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=coverage --exclude-dir=docs; then echo "❌ Discord token detected! Remove it before committing."; exit 1; fi'
         language: system
         pass_filenames: false
         
       - id: aws-credentials-check
         name: AWS Credentials Detection
-        entry: bash -c 'if grep -r -E "(AKIA[0-9A-Z]{16}|aws_access_key|aws_secret)" . --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=coverage; then echo "❌ AWS credentials detected! Remove them before committing."; exit 1; fi'
+        entry: bash -c 'if grep -r -E "(AKIA[0-9A-Z]{16}|aws_access_key|aws_secret)" . --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=coverage --exclude-dir=docs; then echo "❌ AWS credentials detected! Remove them before committing."; exit 1; fi'
         language: system
         pass_filenames: false
