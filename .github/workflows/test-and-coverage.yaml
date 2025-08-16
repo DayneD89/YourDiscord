@@ -31,14 +31,14 @@ jobs:
       - name: 📋 Cache dependencies
         uses: actions/cache@v3
         with:
-          path: YourBot/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('YourBot/package-lock.json') }}
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('YourBot/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            ${{ runner.os }}-npm-
 
       - name: 📋 Install dependencies
         working-directory: YourBot
-        run: npm install
+        run: npm ci
 
       - name: 🧪 Run tests
         working-directory: YourBot
@@ -215,14 +215,14 @@ jobs:
       - name: 📋 Cache dependencies
         uses: actions/cache@v3
         with:
-          path: YourBot/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('YourBot/package-lock.json') }}
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('YourBot/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            ${{ runner.os }}-npm-
 
       - name: 📋 Install dependencies
         working-directory: YourBot
-        run: npm install
+        run: npm ci
 
       - name: 📊 Generate coverage HTML report
         working-directory: YourBot
