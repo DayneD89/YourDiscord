@@ -77,6 +77,16 @@ resource "discord_message" "welcome" {
   channel_id = discord_text_channel.welcome_start_here.id
   content    = "By clicking ✅ you confirm you've read <#${discord_text_channel.rules_and_guide.id}> and agree to the rules, and that you are a supporter. React ✅ to get access."
 }
+resource "discord_message" "region_picker" {
+  channel_id = discord_text_channel.welcome_start_here.id
+  content    = local.region_picker_content
+}
+
+resource "discord_message" "town_picker" {
+  for_each   = local.per_region_town_content
+  channel_id = discord_text_channel.welcome_start_here.id
+  content    = each.value
+}
 resource "discord_text_channel" "rules_and_guide" {
   server_id = discord_server.server.id
   name      = "rules-and-guide"
@@ -181,7 +191,6 @@ resource "discord_text_channel" "governance_vote" {
   category  = discord_category_channel.governance.id
   topic     = "Vote on governance resolutions"
   position  = 11
-  sync_perms_with_category = false
 }
 resource "discord_channel_permission" "governance_vote_everyone" {
   channel_id   = discord_text_channel.governance_vote.id
@@ -203,6 +212,14 @@ resource "discord_text_channel" "governance_discussion" {
   category  = discord_category_channel.governance.id
   topic     = "Moderator discussions"
   position  = 12
+}
+resource "discord_text_channel" "governance_bot" {
+  server_id = discord_server.server.id
+  name      = "governance-bot"
+  category  = discord_category_channel.governance.id
+  topic     = "Bot Commands"
+  position  = 13
+  lifecycle { ignore_changes = [position] }
 }
 
 # --- Regional & Local ---
