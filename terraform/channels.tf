@@ -13,7 +13,7 @@ locals {
             name = "welcome-start-here"
             key = "welcome_start_here"
             topic = "Pick Member / Non-Member and your region."
-            messages = ["welcome", "region_picker", "town_picker"]
+            messages = ["welcome_message", "region_picker", "town_picker"]
           },
           {
             name = "rules-and-guide"
@@ -110,6 +110,61 @@ locals {
         ]
       }
     ]
+  }
+
+  # Discover all message files
+  message_files = fileset("${path.module}/messages/", "*.md")
+  
+  # Create a map of message name to file content
+  file_messages = {
+    for file in local.message_files :
+    replace(file, ".md", "") => file("${path.module}/messages/${file}")
+  }
+  
+  # Dynamic messages that aren't files
+  dynamic_messages = merge(
+    {
+      region_picker = local.region_picker_content
+    },
+    # Create separate entries for each town picker message
+    {
+      for k, v in local.per_region_town_content :
+      "town_picker_${k}" => v
+    }
+  )
+  
+  # Combine file-based and dynamic messages
+  available_messages = merge(local.file_messages, local.dynamic_messages)
+  
+  # Flatten all messages from channel configs with their order
+  all_channel_messages = flatten([
+    for category in local.discord_config.categories : [
+      for channel in category.channels : [
+        for msg_idx, msg_name in lookup(channel, "messages", []) : 
+        # Handle town_picker specially - it creates multiple messages
+        msg_name == "town_picker" ? [
+          for k, v in local.per_region_town_content : {
+            channel_key = channel.key
+            message_name = "town_picker_${k}"
+            order = msg_idx
+            content = v
+          }
+        ] : [
+          {
+            channel_key = channel.key
+            message_name = msg_name
+            order = msg_idx
+            content = local.available_messages[msg_name]
+          }
+        ]
+      ] if lookup(channel, "messages", null) != null
+    ]
+  ])
+  
+  # Create a unique key for each message
+  channel_messages = {
+    for msg in local.all_channel_messages :
+    "${msg.channel_key}_${msg.message_name}" => msg
   }
 
   # Role mapping for permissions
@@ -292,48 +347,12 @@ resource "discord_channel_permission" "channel_permissions" {
   deny         = local.permission_data[each.value.permission_type].deny
 }
 
-# Messages
-resource "discord_message" "welcome" {
-  channel_id = discord_text_channel.channels["welcome_start_here"].id
-  content    = templatefile("${path.module}/messages/welcome_message.md", {
-    rules_channel_id = discord_text_channel.channels["rules_and_guide"].id
-  })
-}
-
-resource "discord_message" "region_picker" {
-  channel_id = discord_text_channel.channels["welcome_start_here"].id
-  content    = local.region_picker_content
-}
-
-resource "discord_message" "town_picker" {
-  for_each   = local.per_region_town_content
-  channel_id = discord_text_channel.channels["welcome_start_here"].id
-  content    = each.value
-}
-
-resource "discord_message" "server_rules" {
-  channel_id = discord_text_channel.channels["rules_and_guide"].id
-  content    = file("${path.module}/messages/server_rules.md")
-}
-
-resource "discord_message" "rules_summary" {
-  channel_id = discord_text_channel.channels["rules_and_guide"].id
-  content    = file("${path.module}/messages/rules_summary.md")
-}
-
-resource "discord_message" "channel_guide" {
-  channel_id = discord_text_channel.channels["rules_and_guide"].id
-  content    = file("${path.module}/messages/channel_guide.md")
-}
-
-resource "discord_message" "contributing_guide" {
-  channel_id = discord_text_channel.channels["governance_links"].id
-  content    = file("${path.module}/messages/contributing_guide.md")
-  embed {
-    color = 6049509
-    title = "Terraform Provider"
-    url   = "https://registry.terraform.io/providers/Lucky3028/discord/latest/docs"
-  }
+# Auto-generated messages from files
+resource "discord_message" "channel_messages" {
+  for_each = local.channel_messages
+  
+  channel_id = discord_text_channel.channels[each.value.channel_key].id
+  content    = each.value.content
 }
 
 # Regional & Local (unchanged, positioned at end)
@@ -417,12 +436,8 @@ locals {
     for k, v in discord_category_channel.categories : k => v.id
   }
   
-  # Message ID lookups
+  # Message ID lookups - now dynamic based on discovered files
   messages = {
-    welcome = discord_message.welcome.id
-    region_picker = discord_message.region_picker.id
-    server_rules = discord_message.server_rules.id
-    rules_summary = discord_message.rules_summary.id
-    channel_guide = discord_message.channel_guide.id
+    for k, v in discord_message.channel_messages : k => v.id
   }
 }
