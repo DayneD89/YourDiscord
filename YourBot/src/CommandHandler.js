@@ -25,12 +25,23 @@ class CommandHandler {
             const content = message.content.trim();
             console.log(`Processing command: "${content}"`);
 
+            // Existing config commands
             if (content.startsWith('!addconfig ')) {
                 await this.handleAddConfig(message, content.substring(11));
             } else if (content.startsWith('!removeconfig ')) {
                 await this.handleRemoveConfig(message, content.substring(14));
             } else if (content === '!viewconfig') {
                 await this.handleViewConfig(message);
+            }
+            // New proposal commands
+            else if (content === '!proposals') {
+                await this.handleViewProposals(message);
+            } else if (content === '!activevotes') {
+                await this.handleActiveVotes(message);
+            } else if (content.startsWith('!voteinfo ')) {
+                await this.handleVoteInfo(message, content.substring(10));
+            } else if (content.startsWith('!forcevote ')) {
+                await this.handleForceVote(message, content.substring(11));
             } else if (content === '!help') {
                 await this.handleHelp(message);
             } else {
@@ -161,16 +172,169 @@ class CommandHandler {
         }
     }
 
+    async handleViewProposals(message) {
+        try {
+            const allProposals = this.bot.getProposalManager().getAllProposals();
+            
+            if (allProposals.length === 0) {
+                await message.reply('📋 No proposals currently tracked.');
+                return;
+            }
+
+            let proposalsDisplay = `📋 **All Proposals** (${allProposals.length} items):\n\n`;
+            
+            allProposals.forEach((proposal, index) => {
+                const status = this.getStatusEmoji(proposal.status);
+                const author = `<@${proposal.authorId}>`;
+                const content = proposal.content.substring(0, 100) + (proposal.content.length > 100 ? '...' : '');
+                
+                proposalsDisplay += `**${index + 1}.** ${status} ${proposal.status.toUpperCase()}\n`;
+                proposalsDisplay += `   👤 ${author}\n`;
+                proposalsDisplay += `   📝 ${content}\n`;
+                
+                if (proposal.status === 'voting') {
+                    const timeLeft = this.getTimeLeft(proposal.endTime);
+                    proposalsDisplay += `   🗳️ Votes: ✅${proposal.yesVotes} ❌${proposal.noVotes} | ${timeLeft}\n`;
+                } else if (proposal.status === 'passed' || proposal.status === 'failed') {
+                    proposalsDisplay += `   🗳️ Final: ✅${proposal.finalYes} ❌${proposal.finalNo}\n`;
+                }
+                proposalsDisplay += '\n';
+            });
+
+            // Split message if too long
+            if (proposalsDisplay.length > 1900) {
+                const chunks = this.splitMessage(proposalsDisplay, 1900);
+                for (let i = 0; i < chunks.length; i++) {
+                    if (i === 0) {
+                        await message.reply(chunks[i]);
+                    } else {
+                        await message.channel.send(chunks[i]);
+                    }
+                }
+            } else {
+                await message.reply(proposalsDisplay);
+            }
+
+        } catch (error) {
+            console.error('Error viewing proposals:', error);
+            await message.reply('❌ An error occurred while retrieving proposals.');
+        }
+    }
+
+    async handleActiveVotes(message) {
+        try {
+            const activeVotes = this.bot.getProposalManager().getActiveVotes();
+            
+            if (activeVotes.length === 0) {
+                await message.reply('🗳️ No active votes currently running.');
+                return;
+            }
+
+            let votesDisplay = `🗳️ **Active Votes** (${activeVotes.length} items):\n\n`;
+            
+            activeVotes.forEach((vote, index) => {
+                const author = `<@${vote.authorId}>`;
+                const content = vote.content.substring(0, 150) + (vote.content.length > 150 ? '...' : '');
+                const timeLeft = this.getTimeLeft(vote.endTime);
+                const voteLink = `https://discord.com/channels/${this.bot.getGuildId()}/${vote.voteChannelId}/${vote.voteMessageId}`;
+                
+                votesDisplay += `**${index + 1}.** 👤 ${author}\n`;
+                votesDisplay += `   📝 ${content}\n`;
+                votesDisplay += `   🗳️ Current: ✅${vote.yesVotes} ❌${vote.noVotes}\n`;
+                votesDisplay += `   ⏰ ${timeLeft}\n`;
+                votesDisplay += `   🔗 [Vote Here](${voteLink})\n\n`;
+            });
+
+            await message.reply(votesDisplay);
+
+        } catch (error) {
+            console.error('Error viewing active votes:', error);
+            await message.reply('❌ An error occurred while retrieving active votes.');
+        }
+    }
+
+    async handleVoteInfo(message, messageId) {
+        try {
+            const proposal = this.bot.getProposalManager().getProposal(messageId);
+            
+            if (!proposal) {
+                await message.reply('❌ No proposal found with that message ID.');
+                return;
+            }
+
+            const status = this.getStatusEmoji(proposal.status);
+            const author = `<@${proposal.authorId}>`;
+            const timeLeft = proposal.status === 'voting' ? this.getTimeLeft(proposal.endTime) : 'N/A';
+            
+            let infoDisplay = `📊 **Proposal Information**\n\n`;
+            infoDisplay += `**Status:** ${status} ${proposal.status.toUpperCase()}\n`;
+            infoDisplay += `**Author:** ${author}\n`;
+            infoDisplay += `**Started:** <t:${Math.floor(Date.parse(proposal.startTime) / 1000)}:F>\n`;
+            
+            if (proposal.status === 'voting') {
+                infoDisplay += `**Ends:** <t:${Math.floor(Date.parse(proposal.endTime) / 1000)}:F>\n`;
+                infoDisplay += `**Time Left:** ${timeLeft}\n`;
+                infoDisplay += `**Current Votes:** ✅${proposal.yesVotes} ❌${proposal.noVotes}\n`;
+                const voteLink = `https://discord.com/channels/${this.bot.getGuildId()}/${proposal.voteChannelId}/${proposal.voteMessageId}`;
+                infoDisplay += `**Vote Link:** ${voteLink}\n`;
+            } else if (proposal.status === 'passed' || proposal.status === 'failed') {
+                infoDisplay += `**Completed:** <t:${Math.floor(Date.parse(proposal.completedAt) / 1000)}:F>\n`;
+                infoDisplay += `**Final Votes:** ✅${proposal.finalYes} ❌${proposal.finalNo}\n`;
+            }
+            
+            infoDisplay += `\n**Proposal Content:**\n${proposal.content}`;
+
+            await message.reply(infoDisplay);
+
+        } catch (error) {
+            console.error('Error getting vote info:', error);
+            await message.reply('❌ An error occurred while retrieving vote information.');
+        }
+    }
+
+    async handleForceVote(message, messageId) {
+        try {
+            const proposal = this.bot.getProposalManager().getProposal(messageId);
+            
+            if (!proposal) {
+                await message.reply('❌ No proposal found with that message ID.');
+                return;
+            }
+
+            if (proposal.status !== 'voting') {
+                await message.reply('❌ This proposal is not currently in voting status.');
+                return;
+            }
+
+            // Force end the vote
+            proposal.endTime = new Date().toISOString();
+            await this.bot.getProposalManager().checkEndedVotes();
+            
+            await message.reply('✅ Vote has been forcefully ended and processed.');
+
+        } catch (error) {
+            console.error('Error forcing vote end:', error);
+            await message.reply('❌ An error occurred while forcing the vote to end.');
+        }
+    }
+
     async handleHelp(message) {
         const helpText = `**🤖 Bot Commands** (This channel only, requires moderator role):
 
+**Reaction Config Commands:**
 \`!addconfig <json>\` - Add a new reaction config
 Example: \`!addconfig {"from": "123456789", "action": "✅", "to": "AddRole(user_id,'member')", "unto": "RemoveRole(user_id,'member')"}\`
 
 \`!removeconfig <message_id> <action>\` - Remove a config
 Example: \`!removeconfig 123456789 ✅\`
 
-\`!viewconfig\` - View current configuration
+\`!viewconfig\` - View current reaction configuration
+
+**Proposal System Commands:**
+\`!proposals\` - View all proposals and their status
+\`!activevotes\` - View currently active votes
+\`!voteinfo <vote_message_id>\` - Get detailed info about a specific vote
+\`!forcevote <vote_message_id>\` - Force end an active vote (emergency use)
 
 \`!help\` - Show this help message
 
@@ -184,9 +348,40 @@ Example: \`!removeconfig 123456789 ✅\`
 - \`AddRole(user_id,'role_name')\`
 - \`RemoveRole(user_id,'role_name')\`
 
+**🗳️ Proposal System:**
+The bot automatically monitors:
+- <#${this.bot.getDebateChannelId()}> for proposals (5 ✅ reactions moves to vote)
+- <#${this.bot.getVoteChannelId()}> for voting (✅/❌ reactions, 7 days)
+- <#${this.bot.getResolutionsChannelId()}> for passed proposals
+
 **💾 Note:** All config changes are automatically saved to S3 and persist across restarts.`;
 
         await message.reply(helpText);
+    }
+
+    getStatusEmoji(status) {
+        switch (status) {
+            case 'voting': return '🗳️';
+            case 'passed': return '✅';
+            case 'failed': return '❌';
+            default: return '📝';
+        }
+    }
+
+    getTimeLeft(endTime) {
+        const now = new Date();
+        const end = new Date(endTime);
+        const diff = end - now;
+        
+        if (diff <= 0) return 'Ended';
+        
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        
+        if (days > 0) return `${days}d ${hours}h left`;
+        if (hours > 0) return `${hours}h ${minutes}m left`;
+        return `${minutes}m left`;
     }
 
     splitMessage(text, maxLength) {
