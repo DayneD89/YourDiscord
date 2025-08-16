@@ -267,12 +267,18 @@ jobs:
           # Count files by category
           FILES_SRC=$(find src -name "*.js" | wc -l)
           FILES_TESTS=$(find tests -name "*.js" | wc -l)
+          FILES_DOCS=$(find ../docs -name "*.md" | wc -l || echo "0")
+          FILES_CONFIG=$(find .. -maxdepth 2 -name "*.json" -o -name "*.yml" -o -name "*.yaml" | grep -v node_modules | wc -l || echo "0")
           FILES_UNCOVERED=$(find src -name "*.js" | while read file; do
             basename_file=$(basename "$file" .js)
             if [ ! -f "tests/unit/${basename_file}.test.js" ] && [ ! -f "tests/integration/${basename_file}.test.js" ]; then
               echo "$file"
             fi
           done | wc -l)
+          
+          # Calculate test ratios
+          TEST_TO_SRC_RATIO=$(echo "scale=2; ${LOC_TESTS} / ${LOC_JS} * 100" | bc -l 2>/dev/null || echo "0")
+          FILES_TESTED=$((${FILES_SRC} - ${FILES_UNCOVERED}))
           
           # Get test counts
           TEST_COUNT=$(grep -r "describe\|test\|it(" tests/ | wc -l || echo "0")
@@ -563,7 +569,7 @@ jobs:
                       data: {
                           labels: ['Tested Files', 'Untested Files'],
                           datasets: [{
-                              data: [\$((${FILES_SRC} - ${FILES_UNCOVERED})), ${FILES_UNCOVERED}],
+                              data: [${FILES_TESTED}, ${FILES_UNCOVERED}],
                               backgroundColor: ['#28a745', '#dc3545']
                           }]
                       },
@@ -583,7 +589,7 @@ jobs:
                           labels: ['Source Files', 'Test Files', 'Docs', 'Config'],
                           datasets: [{
                               label: 'File Count',
-                              data: [${FILES_SRC}, ${FILES_TESTS}, 10, 8],
+                              data: [${FILES_SRC}, ${FILES_TESTS}, ${FILES_DOCS}, ${FILES_CONFIG}],
                               backgroundColor: ['#5865F2', '#28a745', '#17a2b8', '#ffc107']
                           }]
                       },
@@ -598,21 +604,29 @@ jobs:
                   // Test vs Source Ratio Chart
                   const ratioCtx = document.getElementById('ratioChart').getContext('2d');
                   new Chart(ratioCtx, {
-                      type: 'line',
+                      type: 'doughnut',
                       data: {
-                          labels: ['Code Lines', 'Test Lines'],
+                          labels: ['Source Code Lines', 'Test Code Lines'],
                           datasets: [{
-                              label: 'Lines of Code',
                               data: [${LOC_JS}, ${LOC_TESTS}],
-                              borderColor: '#5865F2',
-                              backgroundColor: 'rgba(88, 101, 242, 0.1)',
-                              fill: true
+                              backgroundColor: ['#5865F2', '#28a745']
                           }]
                       },
                       options: {
                           responsive: true,
-                          scales: {
-                              y: { beginAtZero: true }
+                          plugins: {
+                              legend: { position: 'bottom' },
+                              tooltip: {
+                                  callbacks: {
+                                      label: function(context) {
+                                          const ratio = (${LOC_TESTS} / ${LOC_JS} * 100).toFixed(1);
+                                          if (context.dataIndex === 1) {
+                                              return context.label + ': ' + context.formattedValue + ' (' + ratio + '% of source)';
+                                          }
+                                          return context.label + ': ' + context.formattedValue;
+                                      }
+                                  }
+                              }
                           }
                       }
                   });
