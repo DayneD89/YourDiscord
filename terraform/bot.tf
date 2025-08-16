@@ -118,6 +118,25 @@ locals {
     moderator_role_id  = discord_role.moderator.id
     member_role_id     = discord_role.member.id
     command_channel_id = local.channels["governance_bot"]
+    member_command_channel_id = local.channels["members_bot"]
+    proposalConfig = jsonencode({
+      policy = {
+        debateChannelId=local.channels["members_debate"]
+        voteChannelId=local.channels["members_vote"]
+        resolutionsChannelId= local.channels["members_resolutions"]
+        supportThreshold=var.env == "main" ? 5 : 1
+        voteDuration= var.env == "main" ? 604800000 : 300000
+        formats=["Policy"]
+      }
+      governance = {
+        debateChannelId=local.channels["governance_debate"]
+        voteChannelId=local.channels["governance_vote"]
+        resolutionsChannelId= local.channels["governance_discussion"]
+        supportThreshold=var.env == "main" ? 3 : 1
+        voteDuration= var.env == "main" ? 259200000 : 300000
+        formats=["Governance"]
+      }
+    })
     s3_bucket          = aws_s3_object.bot_code.bucket
     s3_key             = aws_s3_object.bot_code.key
     code_hash          = data.archive_file.bot_code.output_md5
@@ -177,6 +196,10 @@ resource "aws_instance" "bot" {
   }
 
   depends_on = [ aws_s3_object.bot_code ]
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_cloudwatch_log_group" "bot" {

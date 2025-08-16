@@ -14,8 +14,12 @@ class EventHandlers {
             console.log('Ignoring bot reaction');
             return;
         }
-        
-        await this.handleReaction(reaction, user, 'add');
+
+        // Handle both existing config-based reactions and new proposal system
+        await Promise.all([
+            this.handleReaction(reaction, user, 'add'),
+            this.handleProposalReaction(reaction, user, 'add')
+        ]);
     }
 
     async handleReactionRemove(reaction, user) {
@@ -25,8 +29,107 @@ class EventHandlers {
             console.log('Ignoring bot reaction');
             return;
         }
-        
-        await this.handleReaction(reaction, user, 'remove');
+
+        await Promise.all([
+            this.handleReaction(reaction, user, 'remove'),
+            this.handleProposalReaction(reaction, user, 'remove')
+        ]);
+    }
+
+    async handleProposalReaction(reaction, user, type) {
+        try {
+            console.log(`handleProposalReaction: ${reaction.emoji.name} ${type} by ${user.tag} on message ${reaction.message.id}`);
+            
+            // Fetch partial reactions/messages
+            if (reaction.partial) {
+                await reaction.fetch();
+            }
+            if (reaction.message.partial) {
+                await reaction.message.fetch();
+            }
+
+            const message = reaction.message;
+            const emoji = reaction.emoji.name;
+
+            // Check if this is in the correct guild
+            if (message.guild?.id !== this.bot.getGuildId()) {
+                console.log(`Wrong guild: ${message.guild?.id} vs ${this.bot.getGuildId()}`);
+                return;
+            }
+
+            console.log(`Message channel: ${message.channel.id}`);
+            
+            // Check if this is a monitored proposal channel
+            const isProposalChannel = this.bot.getProposalManager().proposalConfig && 
+                Object.values(this.bot.getProposalManager().proposalConfig).some(config => 
+                    config.debateChannelId === message.channel.id || config.voteChannelId === message.channel.id
+                );
+
+            if (isProposalChannel) {
+                console.log('Message is in a monitored proposal channel');
+                
+                // Handle support reactions in any debate channel
+                if (emoji === '✅') {
+                    const isDebateChannel = Object.values(this.bot.getProposalManager().proposalConfig).some(config => 
+                        config.debateChannelId === message.channel.id
+                    );
+                    
+                    if (isDebateChannel) {
+                        console.log('Processing support reaction in debate channel');
+                        await this.handleSupportReaction(message);
+                    }
+                }
+                
+                // Handle voting reactions in any vote channel
+                if (emoji === '✅' || emoji === '❌') {
+                    const isVoteChannel = Object.values(this.bot.getProposalManager().proposalConfig).some(config => 
+                        config.voteChannelId === message.channel.id
+                    );
+                    
+                    if (isVoteChannel) {
+                        console.log('Processing vote reaction in vote channel');
+                        await this.handleVotingReaction(message, emoji, type);
+                    }
+                }
+            } else {
+                console.log(`Reaction not in monitored proposal channels. Channel: ${message.channel.id}, Emoji: ${emoji}`);
+            }
+
+        } catch (error) {
+            console.error('Error handling proposal reaction:', error);
+        }
+    }
+
+    async handleSupportReaction(message) {
+        try {
+            console.log(`handleSupportReaction called for message ${message.id} in channel ${message.channel.id}`);
+            
+            // Get the ✅ reaction
+            const supportReaction = message.reactions.cache.get('✅');
+            if (!supportReaction) {
+                console.log('No ✅ reaction found on message');
+                return;
+            }
+
+            // Count support reactions (excluding bot's own reaction)
+            const supportCount = Math.max(0, supportReaction.count - (supportReaction.me ? 1 : 0));
+            
+            console.log(`Support reaction count for message ${message.id}: ${supportCount} (total: ${supportReaction.count}, bot reacted: ${supportReaction.me})`);
+
+            // Always call the proposal manager, let it decide if it should process
+            await this.bot.getProposalManager().handleSupportReaction(message, supportCount);
+
+        } catch (error) {
+            console.error('Error handling support reaction:', error);
+        }
+    }
+
+    async handleVotingReaction(message, emoji, type) {
+        try {
+            await this.bot.getProposalManager().handleVoteReaction(message, emoji, type === 'add');
+        } catch (error) {
+            console.error('Error handling voting reaction:', error);
+        }
     }
 
     async handleReaction(reaction, user, type) {
@@ -57,7 +160,6 @@ class EventHandlers {
 
             // Find matching config
             const configItem = this.bot.getConfigManager().findConfig(messageId, emoji);
-
             if (!configItem) {
                 console.log(`No config found for message ${messageId} with emoji ${emoji}`);
                 console.log(`Available configs:`, currentConfig.map(c => `${c.from}:${c.action}`));
@@ -87,12 +189,6 @@ class EventHandlers {
             console.log('Ignoring bot message');
             return;
         }
-        
-        // Check if message is in the command channel
-        if (message.channel.id !== this.bot.getCommandChannelId()) {
-            console.log(`Message not in command channel (${this.bot.getCommandChannelId()}), ignoring`);
-            return;
-        }
 
         // Check if message starts with !
         if (!message.content.startsWith('!')) {
@@ -100,8 +196,17 @@ class EventHandlers {
             return;
         }
 
-        console.log(`Processing command from ${message.author.tag}: "${message.content}"`);
-        await this.bot.commandHandler.handleCommand(message);
+        // Check if message is in a command channel (either moderator or member)
+        const isModeratorChannel = message.channel.id === this.bot.getCommandChannelId();
+        const isMemberChannel = message.channel.id === this.bot.getMemberCommandChannelId();
+        
+        if (!isModeratorChannel && !isMemberChannel) {
+            console.log(`Message not in command channels (mod: ${this.bot.getCommandChannelId()}, member: ${this.bot.getMemberCommandChannelId()}), ignoring`);
+            return;
+        }
+
+        console.log(`Processing command from ${message.author.tag}: "${message.content}" in ${isModeratorChannel ? 'moderator' : 'member'} channel`);
+        await this.bot.commandHandler.handleCommand(message, isModeratorChannel);
     }
 }
 

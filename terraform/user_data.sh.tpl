@@ -14,18 +14,9 @@ echo "Will log to CloudWatch Logs group: /ec2/${name}-logs"
 
 # Update system and install Node.js + CloudWatch Agent
 echo "Installing Node.js and required packages..."
-if command -v yum >/dev/null 2>&1; then
-  yum update -y
-  curl -fsSL https://rpm.nodesource.com/setup_18.x | bash -
-  yum install -y nodejs unzip amazon-cloudwatch-agent
-elif command -v dnf >/dev/null 2>&1; then
-  dnf -y upgrade
-  curl -fsSL https://rpm.nodesource.com/setup_18.x | bash -
-  dnf install -y nodejs unzip amazon-cloudwatch-agent
-else
-  echo "Unsupported package manager. Exiting."
-  exit 1
-fi
+yum update -y
+curl -fsSL https://rpm.nodesource.com/setup_18.x | bash -
+yum install -y nodejs unzip amazon-cloudwatch-agent
 
 # Verify Node.js installation
 node --version
@@ -58,6 +49,8 @@ cat > runtime.config.json <<JSON
   "moderatorRoleId": "${moderator_role_id}",
   "memberRoleId": "${member_role_id}",
   "commandChannelId": "${command_channel_id}",
+  "memberCommandChannelId": "${member_command_channel_id}",
+  "proposalConfig": ${proposalConfig},
   "s3Bucket": "${s3_bucket}",
   "config": ${config}
 }

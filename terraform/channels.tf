@@ -34,7 +34,7 @@ locals {
           {
             name = "members-chat"
             key = "members_chat"
-            topic = "Members only chat"
+            topic = "Members chat"
           },
           {
             name = "members-resolutions"
@@ -50,6 +50,7 @@ locals {
             name = "members-debate"
             key = "members_debate"
             topic = "Propose and debate resolutions"
+            messages = ["proposal_guide", "withdraw_proposal_guide"]
           },
           {
             name = "members-vote"
@@ -60,6 +61,16 @@ locals {
               everyone = "hide_view"
               member = "react_only"
             }
+          },
+          {
+            name = "members-bot"
+            key = "members_bot"
+            topic = "Members bot commands"
+          },
+          {
+            name = "members-memes"
+            key = "members_memes"
+            topic = "MeeMees"
           }
         ]
       },
@@ -82,6 +93,7 @@ locals {
             key = "governance_debate"
             topic = "Propose and debate governance resolutions"
             sync_perms_with_category = false
+            messages = ["governance_proposal_guide"]
             permissions = {
               everyone = "hide_view"
               member = "read_post"
