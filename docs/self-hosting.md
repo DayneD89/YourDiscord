@@ -187,7 +187,7 @@ In the "OAuth2 > URL Generator" section:
 
 ### 1. Fork the Repository
 
-1. **Visit [YourPartyServer Repository](https://github.com/[PLACEHOLDER_REPO])**
+1. **Visit [YourPartyServer Repository](https://github.com/DayneD89/YourDiscord)**
 2. **Click "Fork"**
 3. **Choose your account**
 4. **Clone your fork**
@@ -662,9 +662,9 @@ If you encounter issues:
    - Application logs
 
 3. **Community Support**
-   - GitHub Issues: [PLACEHOLDER_ISSUES_LINK]
-   - Discord Community: [PLACEHOLDER_DISCORD_INVITE]
-   - Documentation: [PLACEHOLDER_DOCS_LINK]
+   - GitHub Issues: [https://github.com/DayneD89/YourDiscord/issues]
+   - Discord Community: [discord.gg/PeJtZa7NSB]
+   - Documentation: [https://github.com/DayneD89/YourDiscord/tree/main/docs]
 
 4. **Debug Mode**
    Enable verbose logging:
@@ -778,10 +778,10 @@ You've successfully deployed your own YourPartyServer instance! Your Discord com
 
 ### Stay Connected
 
-- **Documentation**: [PLACEHOLDER_DOCS_LINK]
-- **Community Discord**: [PLACEHOLDER_DISCORD_INVITE]  
-- **GitHub Repository**: [PLACEHOLDER_REPO_LINK]
-- **Issue Tracker**: [PLACEHOLDER_ISSUES_LINK]
+- **Documentation**: [https://github.com/DayneD89/YourDiscord/tree/main/docs]
+- **Community Discord**: [discord.gg/PeJtZa7NSB]  
+- **GitHub Repository**: [https://github.com/DayneD89/YourDiscord]
+- **Issue Tracker**: [https://github.com/DayneD89/YourDiscord/issues]
 
 ---
 

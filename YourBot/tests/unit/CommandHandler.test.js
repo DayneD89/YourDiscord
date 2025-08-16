@@ -271,6 +271,345 @@ describe('CommandHandler', () => {
     });
   });
 
+  describe('handleViewConfig', () => {
+    it('should display empty config message', async () => {
+      mockBot.getConfig = jest.fn(() => []);
+      
+      await commandHandler.handleViewConfig(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('📋 No configurations currently set.');
+    });
+
+    it('should display single config', async () => {
+      const mockConfig = [{ from: 'msg123', action: 'emoji', to: 'AddRole(user_id,"member")' }];
+      mockBot.getConfig = jest.fn(() => mockConfig);
+      mockBot.getGuildId = jest.fn(() => 'guild123');
+      
+      // Mock channel search
+      const mockChannel = { isTextBased: () => true, messages: { fetch: jest.fn().mockResolvedValue({}) } };
+      mockGuild.channels.cache.set('channel123', mockChannel);
+      
+      await commandHandler.handleViewConfig(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Current Configuration'));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('msg123'));
+    });
+
+    it('should handle long config with JSON fallback', async () => {
+      const longConfig = Array(50).fill().map((_, i) => ({
+        from: `msg${i}`,
+        action: 'emoji',
+        to: 'AddRole(user_id,"member")'
+      }));
+      mockBot.getConfig = jest.fn(() => longConfig);
+      
+      await commandHandler.handleViewConfig(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalled();
+      expect(mockMessage.channel.send).toHaveBeenCalled();
+    });
+
+    it('should handle errors gracefully', async () => {
+      mockBot.getConfig = jest.fn(() => {
+        throw new Error('Config error');
+      });
+      
+      await commandHandler.handleViewConfig(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ An error occurred while retrieving the config.');
+    });
+  });
+
+  describe('handleViewProposals', () => {
+    beforeEach(() => {
+      mockBot.proposalManager = {
+        getAllProposals: jest.fn()
+      };
+      mockBot.getProposalManager = jest.fn(() => mockBot.proposalManager);
+    });
+
+    it('should display no proposals message', async () => {
+      mockBot.proposalManager.getAllProposals.mockReturnValue([]);
+      
+      await commandHandler.handleViewProposals(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('📋 No proposals currently tracked.');
+    });
+
+    it('should display proposals list', async () => {
+      const mockProposals = [
+        {
+          authorId: 'user123',
+          content: 'Test proposal',
+          status: 'voting',
+          endTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          yesVotes: 5,
+          noVotes: 2,
+          proposalType: 'policy'
+        }
+      ];
+      mockBot.proposalManager.getAllProposals.mockReturnValue(mockProposals);
+      
+      await commandHandler.handleViewProposals(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('All Proposals'));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Test proposal'));
+    });
+
+    it('should handle long proposals list', async () => {
+      const longProposals = Array(20).fill().map((_, i) => ({
+        authorId: `user${i}`,
+        content: `Test proposal ${i} with very long content that should trigger message splitting behavior`,
+        status: 'passed',
+        finalYes: 10,
+        finalNo: 3
+      }));
+      mockBot.proposalManager.getAllProposals.mockReturnValue(longProposals);
+      
+      await commandHandler.handleViewProposals(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalled();
+    });
+
+    it('should handle errors gracefully', async () => {
+      mockBot.proposalManager.getAllProposals.mockImplementation(() => {
+        throw new Error('Proposal error');
+      });
+      
+      await commandHandler.handleViewProposals(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ An error occurred while retrieving proposals.');
+    });
+  });
+
+  describe('handleActiveVotes', () => {
+    beforeEach(() => {
+      mockBot.proposalManager = {
+        getActiveVotes: jest.fn()
+      };
+      mockBot.getProposalManager = jest.fn(() => mockBot.proposalManager);
+      mockBot.getGuildId = jest.fn(() => 'guild123');
+    });
+
+    it('should display no active votes message', async () => {
+      mockBot.proposalManager.getActiveVotes.mockReturnValue([]);
+      
+      await commandHandler.handleActiveVotes(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('🗳️ No active votes currently running.');
+    });
+
+    it('should display active votes list', async () => {
+      const mockVotes = [
+        {
+          authorId: 'user123',
+          content: 'Test vote content',
+          endTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+          yesVotes: 8,
+          noVotes: 3,
+          voteChannelId: 'channel123',
+          voteMessageId: 'msg456',
+          proposalType: 'governance'
+        }
+      ];
+      mockBot.proposalManager.getActiveVotes.mockReturnValue(mockVotes);
+      
+      await commandHandler.handleActiveVotes(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Active Votes'));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Test vote content'));
+    });
+
+    it('should handle errors gracefully', async () => {
+      mockBot.proposalManager.getActiveVotes.mockImplementation(() => {
+        throw new Error('Active votes error');
+      });
+      
+      await commandHandler.handleActiveVotes(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ An error occurred while retrieving active votes.');
+    });
+  });
+
+  describe('handleVoteInfo', () => {
+    beforeEach(() => {
+      mockBot.proposalManager = {
+        getProposal: jest.fn()
+      };
+      mockBot.getProposalManager = jest.fn(() => mockBot.proposalManager);
+      mockBot.getGuildId = jest.fn(() => 'guild123');
+    });
+
+    it('should handle proposal not found', async () => {
+      mockBot.proposalManager.getProposal.mockReturnValue(null);
+      
+      await commandHandler.handleVoteInfo(mockMessage, 'msg123');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ No proposal found with that message ID.');
+    });
+
+    it('should display voting proposal info', async () => {
+      const mockProposal = {
+        status: 'voting',
+        authorId: 'user123',
+        startTime: new Date().toISOString(),
+        endTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        yesVotes: 15,
+        noVotes: 7,
+        voteChannelId: 'channel123',
+        voteMessageId: 'msg456',
+        content: 'Test proposal content',
+        proposalType: 'policy'
+      };
+      mockBot.proposalManager.getProposal.mockReturnValue(mockProposal);
+      
+      await commandHandler.handleVoteInfo(mockMessage, 'msg123');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Proposal Information'));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('VOTING'));
+    });
+
+    it('should display completed proposal info', async () => {
+      const mockProposal = {
+        status: 'passed',
+        authorId: 'user123',
+        startTime: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        finalYes: 20,
+        finalNo: 5,
+        content: 'Completed proposal content'
+      };
+      mockBot.proposalManager.getProposal.mockReturnValue(mockProposal);
+      
+      await commandHandler.handleVoteInfo(mockMessage, 'msg123');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Proposal Information'));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('PASSED'));
+    });
+
+    it('should handle errors gracefully', async () => {
+      mockBot.proposalManager.getProposal.mockImplementation(() => {
+        throw new Error('Vote info error');
+      });
+      
+      await commandHandler.handleVoteInfo(mockMessage, 'msg123');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ An error occurred while retrieving vote information.');
+    });
+  });
+
+  describe('handleForceVote', () => {
+    beforeEach(() => {
+      mockBot.proposalManager = {
+        getProposal: jest.fn(),
+        checkEndedVotes: jest.fn()
+      };
+      mockBot.getProposalManager = jest.fn(() => mockBot.proposalManager);
+    });
+
+    it('should handle proposal not found', async () => {
+      mockBot.proposalManager.getProposal.mockReturnValue(null);
+      
+      await commandHandler.handleForceVote(mockMessage, 'msg123');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ No proposal found with that message ID.');
+    });
+
+    it('should handle non-voting proposal', async () => {
+      const mockProposal = { status: 'passed' };
+      mockBot.proposalManager.getProposal.mockReturnValue(mockProposal);
+      
+      await commandHandler.handleForceVote(mockMessage, 'msg123');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ This proposal is not currently in voting status.');
+    });
+
+    it('should force end voting proposal', async () => {
+      const mockProposal = { 
+        status: 'voting',
+        endTime: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+      };
+      mockBot.proposalManager.getProposal.mockReturnValue(mockProposal);
+      mockBot.proposalManager.checkEndedVotes.mockResolvedValue();
+      
+      await commandHandler.handleForceVote(mockMessage, 'msg123');
+
+      expect(mockProposal.endTime).toBeDefined();
+      expect(mockBot.proposalManager.checkEndedVotes).toHaveBeenCalled();
+      expect(mockMessage.reply).toHaveBeenCalledWith('✅ Vote has been forcefully ended and processed.');
+    });
+
+    it('should handle errors gracefully', async () => {
+      mockBot.proposalManager.getProposal.mockImplementation(() => {
+        throw new Error('Force vote error');
+      });
+      
+      await commandHandler.handleForceVote(mockMessage, 'msg123');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ An error occurred while forcing the vote to end.');
+    });
+  });
+
+  describe('handleModeratorHelp', () => {
+    it('should display moderator help with proposal config', async () => {
+      mockBot.proposalManager = {
+        proposalConfig: {
+          policy: {
+            debateChannelId: 'debate123',
+            voteChannelId: 'vote123',
+            resolutionsChannelId: 'res123',
+            supportThreshold: 5,
+            formats: ['Policy']
+          }
+        }
+      };
+      mockBot.getProposalManager = jest.fn(() => mockBot.proposalManager);
+      
+      await commandHandler.handleModeratorHelp(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Moderator Bot Commands'));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('policy'));
+    });
+
+    it('should display moderator help without proposal config', async () => {
+      mockBot.proposalManager = { proposalConfig: null };
+      mockBot.getProposalManager = jest.fn(() => mockBot.proposalManager);
+      
+      await commandHandler.handleModeratorHelp(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Moderator Bot Commands'));
+    });
+  });
+
+  describe('handleMemberHelp', () => {
+    it('should display member help with proposal config', async () => {
+      mockBot.proposalManager = {
+        proposalConfig: {
+          governance: {
+            debateChannelId: 'debate456',
+            supportThreshold: 3,
+            formats: ['Governance']
+          }
+        }
+      };
+      mockBot.getProposalManager = jest.fn(() => mockBot.proposalManager);
+      
+      await commandHandler.handleMemberHelp(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Member Bot Commands'));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('governance'));
+    });
+
+    it('should display member help without proposal config', async () => {
+      mockBot.proposalManager = { proposalConfig: null };
+      mockBot.getProposalManager = jest.fn(() => mockBot.proposalManager);
+      
+      await commandHandler.handleMemberHelp(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Member Bot Commands'));
+    });
+  });
+
   describe('utility methods', () => {
     describe('getStatusEmoji', () => {
       it('should return correct emojis for different statuses', () => {

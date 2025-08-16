@@ -881,9 +881,9 @@ async function handleSupportReaction(message, reactionCount) {
 
 ### Development Support
 
-- **GitHub Discussions**: [PLACEHOLDER_DISCUSSIONS_LINK] - Technical questions and architecture discussions
-- **Discord Server**: [PLACEHOLDER_DISCORD_INVITE] - Real-time help and community chat
-- **Issue Tracker**: [PLACEHOLDER_ISSUES_LINK] - Bug reports and feature requests
+- **GitHub Discussions**: [https://github.com/DayneD89/YourDiscord/discussions] - Technical questions and architecture discussions
+- **Discord Server**: [discord.gg/PeJtZa7NSB] - Real-time help and community chat
+- **Issue Tracker**: [https://github.com/DayneD89/YourDiscord/issues] - Bug reports and feature requests
 
 ### Code Review Process
 

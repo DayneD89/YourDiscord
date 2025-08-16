@@ -516,10 +516,10 @@ Different people contribute in different ways:
 - **Pull Requests**: Direct contribution to documentation
 
 #### 3. Community Resources
-- **Documentation**: [PLACEHOLDER_DOCS_LINK]
-- **FAQ**: [PLACEHOLDER_FAQ_LINK]  
-- **Tutorials**: [PLACEHOLDER_TUTORIALS_LINK]
-- **Examples**: [PLACEHOLDER_EXAMPLES_LINK]
+- **Documentation**: [https://github.com/DayneD89/YourDiscord/tree/main/docs]
+- **FAQ**: [discord.gg/PeJtZa7NSB]  
+- **Tutorials**: [https://github.com/DayneD89/YourDiscord/tree/main/docs]
+- **Examples**: [https://github.com/DayneD89/YourDiscord/tree/main/docs]
 
 ### Building Your Confidence
 
@@ -550,9 +550,9 @@ Every contribution, no matter how small, helps make YourPartyServer better for e
 **Welcome to the community - we're excited to work with you!** 🚀
 
 ### Quick Links
-- **Discord Server**: [PLACEHOLDER_DISCORD_INVITE]
-- **GitHub Issues**: [PLACEHOLDER_ISSUES_LINK]
-- **Documentation**: [PLACEHOLDER_DOCS_LINK]
-- **Getting Started**: [PLACEHOLDER_GETTING_STARTED_LINK]
+- **Discord Server**: [discord.gg/PeJtZa7NSB]
+- **GitHub Issues**: [https://github.com/DayneD89/YourDiscord/issues]
+- **Documentation**: [https://github.com/DayneD89/YourDiscord/tree/main/docs]
+- **Getting Started**: [https://github.com/DayneD89/YourDiscord/tree/main/docs]
 
 *Together, we're building the future of community governance on Discord.*
