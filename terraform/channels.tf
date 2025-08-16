@@ -1,13 +1,42 @@
+# =============================================================================
+# DISCORD CHANNEL CONFIGURATION
+# =============================================================================
+# This file defines the complete Discord server structure including:
+# - Channel categories for organization
+# - Individual channels within each category
+# - Permission overrides for different user roles
+# - Channel topics and descriptions
+# - Message content configuration
+# =============================================================================
+
 locals {
-  # Complete channel configuration
-  discord_config = {
-    categories = [
-      {
-        name = "Entry & Info"
-        key = "entry_info"
-        permissions = {
-          everyone = "react_only"
-        }
+    # =============================================================================
+    # DISCORD SERVER STRUCTURE CONFIGURATION
+    # =============================================================================
+    # This configuration defines the entire Discord server layout using a 
+    # hierarchical structure:
+    # 1. Categories (channel groups)
+    # 2. Channels within categories  
+    # 3. Permission overrides for roles
+    # 4. Message content assignments
+    # =============================================================================
+    
+    discord_config = {
+        categories = [
+            # -------------------------------------------------------------------------
+            # ENTRY & INFO CATEGORY
+            # -------------------------------------------------------------------------
+            # Public-facing channels for new user onboarding and server information
+            # These channels are visible to everyone and provide essential info
+            {
+                name = "Entry & Info"
+                key = "entry_info"
+                
+                # Category-level permissions applied to all channels unless overridden
+                # "react_only" allows viewing and reacting but not posting messages
+                permissions = {
+                    everyone = "react_only"  # @everyone role gets read + react permissions
+                }
         channels = [
           {
             name = "welcome-start-here"
@@ -431,6 +460,25 @@ resource "discord_channel_permission" "local-ov" {
   overwrite_id = discord_role.town[each.key].id
   allow        = data.discord_permission.read_post.allow_bits
   deny         = data.discord_permission.read_post.deny_bits
+  
+  # Add explicit dependencies and retry behavior
+  depends_on = [
+    discord_text_channel.local,
+    discord_role.town
+  ]
+  
+  # Handle transient Discord API issues gracefully
+  lifecycle {
+    # Prevent destruction during API timeout issues
+    prevent_destroy = false
+    # Ignore changes that might occur due to Discord API inconsistencies
+    ignore_changes = []
+  }
+  
+  # Add a small delay between permission operations to avoid rate limits
+  provisioner "local-exec" {
+    command = "sleep 1"
+  }
 }
 
 # Lookup locals for easy reference

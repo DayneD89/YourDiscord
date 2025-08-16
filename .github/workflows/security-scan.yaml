@@ -1,0 +1,64 @@
+name: 🔒 Security Scan
+
+on:
+  push:
+    branches: [ main, features ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  secret-scan:
+    name: 🕵️ Secret Detection
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🔍 Scan for secrets
+        run: |
+          echo "🔍 Scanning for potential Discord tokens and secrets..."
+          
+          # Check for Discord token patterns
+          if grep -r -E "(mfa\.[a-zA-Z0-9_-]{20,}|[a-zA-Z0-9_-]{23,28}\.[a-zA-Z0-9_-]{6,7}\.[a-zA-Z0-9_-]{27})" . --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=coverage --exclude-dir=docs; then
+            echo "❌ Potential Discord token found in files!"
+            echo "Please remove any Discord tokens from your code and use environment variables instead."
+            exit 1
+          fi
+          
+          # Check for AWS keys
+          if grep -r -E "(AKIA[0-9A-Z]{16}|aws_access_key|aws_secret)" . --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=coverage --exclude-dir=docs --exclude-dir=.github --exclude="*.yaml" --exclude="*.yml"; then
+            echo "❌ Potential AWS credentials found in files!"
+            echo "Please remove any AWS credentials from your code and use IAM roles or environment variables instead."
+            exit 1
+          fi
+          
+          # Check for other common secrets
+          if grep -r -E "(password\s*=|secret\s*=|api_key\s*=)" . --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=coverage --exclude="*.md" --exclude="*.yaml" --exclude="*.yml"; then
+            echo "⚠️ Potential hardcoded secrets found. Please review:"
+            grep -r -E "(password\s*=|secret\s*=|api_key\s*=)" . --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=coverage --exclude="*.md" --exclude="*.yaml" --exclude="*.yml" || true
+            echo "If these are not real secrets, you can ignore this warning."
+          fi
+          
+          echo "✅ No obvious Discord tokens or AWS credentials detected!"
+
+      - name: 🔍 Check file names for secrets
+        run: |
+          echo "🔍 Checking for secret-like filenames..."
+          
+          # Check for files that might contain secrets
+          if find . -name "*.token" -o -name "*secret*" -o -name "*password*" -o -name ".env*" | grep -v ".env.example" | grep -v node_modules | head -10; then
+            echo "⚠️ Found files that might contain secrets. Make sure they're in .gitignore!"
+          fi
+          
+          echo "✅ Filename check complete!"
+
+      - name: 📋 Security recommendations
+        run: |
+          echo "## 🔒 Security Reminders" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Use environment variables for all secrets" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Never commit Discord tokens, AWS keys, or passwords" >> $GITHUB_STEP_SUMMARY  
+          echo "- ✅ Use GitHub Secrets for CI/CD credentials" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Review .gitignore to ensure secrets are excluded" >> $GITHUB_STEP_SUMMARY

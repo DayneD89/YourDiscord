@@ -22,19 +22,5 @@ data "discord_permission" "react_only" {
   send_messages         = "deny"
 }
 
-data "aws_vpc" "default" {
-  default = true
-}
-
-data "aws_subnets" "default" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
-  }
-}
-
-locals {
-  vpc_id    = data.aws_vpc.default.id
-  subnet_id = data.aws_subnets.default.ids[0]
-  name      = "yourdiscord-${var.env}"
-}
+# AWS VPC and subnet data sources moved to networking.tf
+# Local values moved to locals.tf to avoid duplicates

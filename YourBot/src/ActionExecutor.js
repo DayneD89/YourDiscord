@@ -1,12 +1,18 @@
+// Executes role-based actions triggered by reactions
+// Parses action strings and safely applies role changes to users
+// Validates user eligibility before performing actions
 class ActionExecutor {
     constructor(bot) {
         this.bot = bot;
     }
 
+    // Main action executor - parses action strings and delegates to specific handlers
+    // Action format: "AddRole(user_id,'role_name')" or "RemoveRole(user_id,'role_name')"
     async executeAction(action, member, guild) {
         console.log(`Executing action: ${action} for user: ${member.user.tag}`);
 
-        // Parse the action
+        // Parse action string using regex to extract role names
+        // This allows flexible configuration while maintaining security
         const addRoleMatch = action.match(/AddRole\(user_id,'(.+?)'\)/);
         const removeRoleMatch = action.match(/RemoveRole\(user_id,'(.+?)'\)/);
 
@@ -23,6 +29,8 @@ class ActionExecutor {
         }
     }
 
+    // Add a role to a user with eligibility validation
+    // Prevents unauthorized role assignments and duplicate role additions
     async executeAddRole(roleName, member, guild) {
         const role = this.findRole(roleName, guild);
         
@@ -31,7 +39,8 @@ class ActionExecutor {
             return;
         }
 
-        // For non-member role actions, check if user can act
+        // Validate user eligibility for non-member roles
+        // Member role can be assigned to anyone, but other roles require validation
         if (roleName !== 'member') {
             const validation = this.bot.getUserValidator().canAct(member, this.bot.getMemberRoleId());
             if (!validation.canAct) {
@@ -40,6 +49,7 @@ class ActionExecutor {
             }
         }
 
+        // Check if user already has the role to avoid unnecessary Discord API calls
         if (!member.roles.cache.has(role.id)) {
             await member.roles.add(role);
             console.log(`✅ Added role ${role.name} to ${member.user.tag}`);
@@ -73,13 +83,16 @@ class ActionExecutor {
         }
     }
 
+    // Find Discord role by name with special handling for configured roles
+    // Prioritizes role IDs from configuration over name-based lookup for reliability
     findRole(roleName, guild) {
-        // Check if it's a special role name with corresponding ID
+        // Use configured role ID for special roles to avoid name conflicts
+        // Role names can change, but IDs remain constant
         if (roleName === 'member' && this.bot.getMemberRoleId()) {
             return guild.roles.cache.get(this.bot.getMemberRoleId());
         }
         
-        // Search by name
+        // Fall back to name-based search for custom roles
         return guild.roles.cache.find(r => r.name === roleName);
     }
 

@@ -1,7 +1,8 @@
+# Legacy security group - kept for compatibility
 resource "aws_security_group" "bot" {
   name        = "${local.name}-sg"
   description = "Egress-only for Discord bot"
-  vpc_id      = local.vpc_id
+  vpc_id      = local.selected_vpc_id
 
   egress {
     from_port   = 0
@@ -111,6 +112,41 @@ locals {
 }
 
 locals {
+  # Enhanced user data with health checks and readiness monitoring
+  user_data_enhanced = templatefile("${path.module}/user_data_enhanced.sh.tpl", {
+    name               = local.name
+    bot_token          = var.discord_token
+    guild_id           = discord_server.server.id
+    moderator_role_id  = discord_role.moderator.id
+    member_role_id     = discord_role.member.id
+    command_channel_id = local.channels["governance_bot"]
+    member_command_channel_id = local.channels["members_bot"]
+    proposalConfig = jsonencode({
+      policy = {
+        debateChannelId=local.channels["members_debate"]
+        voteChannelId=local.channels["members_vote"]
+        resolutionsChannelId= local.channels["members_resolutions"]
+        supportThreshold=var.env == "main" ? 5 : 1
+        voteDuration= var.env == "main" ? 604800000 : 300000
+        formats=["Policy"]
+      }
+      governance = {
+        debateChannelId=local.channels["governance_debate"]
+        voteChannelId=local.channels["governance_vote"]
+        resolutionsChannelId= local.channels["governance_discussion"]
+        supportThreshold=var.env == "main" ? 3 : 1
+        voteDuration= var.env == "main" ? 259200000 : 300000
+        formats=["Governance"]
+      }
+    })
+    s3_bucket          = aws_s3_object.bot_code.bucket
+    s3_key             = aws_s3_object.bot_code.key
+    code_hash          = data.archive_file.bot_code.output_md5
+    config             = local.config
+    network_type       = var.use_private_subnet ? "private" : "public"
+  })
+  
+  # Legacy user data for compatibility
   user_data = templatefile("${path.module}/user_data.sh.tpl", {
     name               = local.name
     bot_token          = var.discord_token
@@ -174,16 +210,20 @@ resource "aws_s3_object" "bot_code" {
   source_hash = data.archive_file.bot_code.output_md5
 }
 
+# =============================================================================
+# DISCORD BOT INSTANCE 
+# =============================================================================
+
+# Single bot instance with enhanced features
 resource "aws_instance" "bot" {
-  #count = var.env == "main" ? 1 : 0
   ami                    = data.aws_ami.al2023_arm.id
   instance_type          = var.env == "main" ? "t4g.micro" : "t4g.nano"
-  subnet_id              = local.subnet_id
-  vpc_security_group_ids = [aws_security_group.bot.id]
+  subnet_id              = local.selected_subnet_id
+  vpc_security_group_ids = [aws_security_group.bot_enhanced.id]
   iam_instance_profile   = aws_iam_instance_profile.ec2.name
-  key_name = "yourdiscord"
+  key_name               = "yourdiscord"
 
-  user_data              = local.user_data
+  user_data                   = local.user_data_enhanced
   user_data_replace_on_change = true
 
   root_block_device {
@@ -193,9 +233,14 @@ resource "aws_instance" "bot" {
 
   tags = {
     Name = local.name
+    Network = var.use_private_subnet ? "Private" : "Public" 
+    HealthCheck = "Enabled"
   }
 
-  depends_on = [ aws_s3_object.bot_code ]
+  depends_on = [
+    aws_s3_object.bot_code,
+    aws_nat_gateway.bot  # Ensure NAT is ready for private subnet (if using private)
+  ]
 
   lifecycle {
     create_before_destroy = true

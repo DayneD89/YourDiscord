@@ -1,67 +1,35 @@
-# Server & Governance Proposals
+🏛️ **Governance Proposals** 🏛️
 
-This system is for proposing **changes to our Discord server and internal operations**.
+💡 Propose **changes to our Discord server and community operations**.
 
-## How It Works
+## 🔄 Process
+📝 **Submit** → ✅ **3 Support** → 🗳️ **3-Day Vote** → ⚙️ **Implementation**
 
-**1. Submit Proposal** → **2. Get 3 Support Reactions** → **3. Vote for 3 Days** → **4. Implementation**
+## 📤 Submit Governance
 
----
+**Format:** `**Governance**: Your proposal here`
 
-## Submit Your Governance Proposal
+**Examples:**
+- `**Governance**: Weekly game nights every Friday 8 PM`
+- `**Governance**: Add voice channels for regional meetups`
+- `**Governance**: New member intro requirement within 7 days`
+- `**Governance**: Member verification system for security`
 
-### Required Format:
-```
-**Governance**: Your governance proposal here
-```
+## 🗳️ Voting Process
+1. Need **3 support reactions** to advance
+2. **3-day voting period** with ✅ (support) or ❌ (oppose)
+3. Bot automatically manages the process
 
-### Good Examples:
-```
-**Governance**: Create weekly community game nights every Friday at 8 PM.
+## 📊 Results
+**✅ Proposal Passes**: Changes implemented and added to governance resolutions
+**❌ Proposal Fails**: Not implemented, can resubmit with modifications
 
-**Governance**: Add new voice channels for regional meetup planning.
+## 📝 Guidelines
+- **Think Practically**: Focus on server functionality
+- **Be Specific**: Include implementation details
+- **Consider Impact**: Think about all members
 
-**Governance**: Require new members to introduce themselves within 7 days.
+## 📂 Categories
+🏗️ Server Structure • 🎮 Events • 👋 Member Experience • 🛡️ Moderation • ⚙️ Operations
 
-**Governance**: Change moderator meeting schedule to weekly instead of bi-weekly.
-
-**Governance**: Implement member verification system for better security.
-```
-
----
-
-## Getting Support
-
-- Your governance proposal needs **3 reactions** to advance to voting
-- Once you reach 3 supporters, the bot moves it to voting automatically  
-- The vote runs for **3 days** with support or oppose reactions
-
----
-
-## Results
-
-**Proposal Passes**: Changes are implemented, added to governance resolutions
-
-**Proposal Fails**: Not implemented, can be resubmitted later with modifications
-
----
-
-## Guidelines
-
-**Think Practically**: Focus on server functionality and community operations
-
-**Be Specific**: Include implementation details and timelines where relevant
-
-**Consider Impact**: Think about how changes affect all members
-
-## Governance Categories
-
-- **Server Structure**: Channels, roles, permissions, organization
-- **Community Events**: Regular activities, meetups, social functions
-- **Member Experience**: Onboarding, verification, welcome processes
-- **Moderation**: Rules, enforcement, reporting systems
-- **Operations**: Meeting schedules, decision processes, workflows
-
----
-
-Ready to propose? Use the format: **Governance**: Your proposal here
+🚀 **Ready to propose?** Format: `**Governance**: Your proposal here`

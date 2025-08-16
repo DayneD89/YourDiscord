@@ -1,68 +1,33 @@
-# Withdrawing Resolutions
+🔄 **Withdrawal System** 🔄
 
-Remove previously passed policies and governance decisions.
+💡 Remove previously passed policies and governance decisions through democratic process.
 
-## How It Works
+## 🔄 Process
+📝 **Submit** → ✅ **Get Support** → 🗳️ **Vote** → ❌ **Remove Resolution**
 
-**1. Submit Withdrawal** → **2. Get Support** → **3. Vote** → **4. Remove Resolution**
+## 📤 Submit Withdrawal
 
----
+**Format:** `**Withdraw**: Description of policy to remove`
 
-## Submit Withdrawal
+**Examples:**
+- `**Withdraw**: Weekly community game nights policy`
+- `**Withdraw**: Universal basic income proposal`
+- `**Withdraw**: New channel structure decision`
 
-### Format:
-```
-**Withdraw**: Description of policy/decision to remove
-```
+## 🗳️ Support & Voting
+- **Policy withdrawals**: Need 5 support reactions
+- **Governance withdrawals**: Need 3 support reactions
+- **Vote meaning**: ✅ = Remove policy, ❌ = Keep policy
 
-### Examples:
-```
-**Withdraw**: Renationalise water utilities
+⚠️ **Important**: Supporting withdrawal means you want to REMOVE the policy
 
-**Withdraw**: Universal basic income policy
+## 📊 Results
+**✅ Withdrawal Passes**: Resolution permanently removed from official positions
+**❌ Withdrawal Fails**: Resolution remains active, can resubmit later
 
-**Withdraw**: Weekly community game nights
-```
+## 📝 Guidelines
+- **Reference Clearly**: Describe specific policy to remove
+- **Check First**: Review resolutions channels for exact wording
+- **Explain Why**: Provide reasoning for withdrawal
 
----
-
-## Getting Support
-
-- **Policy withdrawals**: Need 5 reactions
-- **Governance withdrawals**: Need 3 reactions
-- Same thresholds and voting duration as original proposal type
-
----
-
-## Voting
-
-**Vote meaning:**
-- Support reaction = "Yes, withdraw this resolution"
-- Oppose reaction = "No, keep this resolution"
-
-**Important**: Supporting withdrawal means you want to REMOVE the policy.
-
----
-
-## Results
-
-**Withdrawal Passes:**
-- Original resolution permanently deleted
-- Withdrawal recorded with vote counts
-- Policy no longer active
-
-**Withdrawal Fails:**
-- Original resolution unchanged
-- Can resubmit with modifications
-
----
-
-## Guidelines
-
-- **Reference clearly**: Describe specific policy to remove
-- **Check resolutions channels**: Find exact wording first
-- **Provide reasoning**: Explain why withdrawal needed
-
----
-
-Ready to withdraw? Format: **Withdraw**: Policy to remove
+🚀 **Ready to withdraw?** Format: `**Withdraw**: Policy to remove`
