@@ -17,22 +17,70 @@ locals {
     }
   }
 
+  region_names_sorted = sort(keys(local.regions))
+
   region_objs = [
-    for region_name, r in local.regions : {
-      name = region_name
-      key  = lower(replace(replace(region_name, " ", "-"), "/", "-"))
-      towns = r.towns
+    for rn in local.region_names_sorted : {
+      name  = rn
+      key   = lower(replace(replace(rn, " ", "-"), "/", "-"))
+      towns = local.regions[rn].towns
     }
   ]
 
   town_objs = flatten([
-    for region_name, r in local.regions : [
-      for t in r.towns : {
-        region_name = region_name
-        region_key  = lower(replace(replace(region_name, " ", "-"), "/", "-"))
+    for rn in local.region_names_sorted : [
+      for t in local.regions[rn].towns : {
+        region_name = rn
+        region_key  = lower(replace(replace(rn, " ", "-"), "/", "-"))
         town_name   = t
         town_key    = lower(replace(replace(t, " ", "-"), "/", "-"))
       }
     ]
   ])
+
+  emoji_pool = [
+    "1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟",
+    "🅰️","🅱️","✅","❌","⭕","❎","✳️","✴️","❇️",
+    "🔺","🔻","🔸","🔹","🔷","🔶",
+    "🔴","🟠","🟡","🟢","🔵","🟣","🟤","⚪","⚫",
+    "⬜","⬛","🟥","🟧","🟨","🟩","🟦","🟪","🟫",
+    "◀️","▶️","⏹️","⏺️","⏯️","⏸️","⏭️","⏮️",
+    "⏫","⏬","⏪","⏩"
+  ]
+
+  region_picker_header = [
+    "**Choose your region**",
+    "React with the emoji shown next to your region:",
+    ""
+  ]
+
+  region_picker_lines = [
+    for i, r in local.region_objs :
+    format("%s  **%s**", local.emoji_pool[i], r.name)
+    if i < length(local.emoji_pool)
+  ]
+
+  region_picker_content = join("\n", concat(
+    local.region_picker_header,
+    local.region_picker_lines
+  ))
+
+  per_region_town_content = {
+    for r in local.region_objs :
+    r.key => join("\n", concat(
+      [
+        format("**%s — Towns**", r.name),
+        "React with the emoji next to any towns you want to subscribe to:",
+        ""
+      ],
+      [
+        for j, t in r.towns :
+        format("%s  %s", local.emoji_pool[j], t)
+        if j < length(local.emoji_pool)
+      ],
+      length(r.towns) > length(local.emoji_pool)
+        ? ["", "_(Truncated — add more emojis to the pool or split across messages.)_"]
+        : []
+    ))
+  }
 }

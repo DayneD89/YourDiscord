@@ -1,0 +1,20 @@
+{
+  "name": "yourbot",
+  "version": "1.0.0",
+  "description": "Discord bot for managing reaction roles with dynamic S3-backed configuration",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "nodemon bot.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "aws-sdk": "^2.1691.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

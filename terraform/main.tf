@@ -3,7 +3,7 @@ data discord_local_image logo {
 }
 
 resource discord_server server {
-    name = "Your Party Supporters"
+    name = var.env == "main" ? "Your Party Supporters" : "YPS - ${var.env}"
     default_message_notifications = 0
     icon_data_uri = data.discord_local_image.logo.data_uri
 }
@@ -20,11 +20,14 @@ output server {
   value = discord_server.server.id
 }
 output welcome {
-  value = discord_text_channel.welcome_start_here.id
+  value = discord_message.welcome.id
 }
 output member {
   value = discord_role.member.id
 }
 output mod {
   value = discord_role.moderator.id
+}
+output bot {
+  value = discord_text_channel.governance_bot.id
 }

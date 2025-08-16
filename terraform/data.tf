@@ -21,3 +21,20 @@ data "discord_permission" "react_only" {
   add_reactions         = "allow"
   send_messages         = "deny"
 }
+
+data "aws_vpc" "default" {
+  default = true
+}
+
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
+}
+
+locals {
+  vpc_id    = data.aws_vpc.default.id
+  subnet_id = data.aws_subnets.default.ids[0]
+  name      = "yourdiscord-${var.env}"
+}
