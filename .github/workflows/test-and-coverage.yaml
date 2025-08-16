@@ -36,7 +36,7 @@ jobs:
 
       - name: 📋 Install dependencies
         working-directory: YourBot
-        run: npm ci
+        run: npm install
 
       - name: 🧪 Run tests
         working-directory: YourBot
@@ -202,7 +202,7 @@ jobs:
 
       - name: 📋 Install dependencies
         working-directory: YourBot
-        run: npm ci
+        run: npm install
 
       - name: 📊 Generate coverage HTML report
         working-directory: YourBot

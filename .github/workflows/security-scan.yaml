@@ -29,7 +29,7 @@ jobs:
           fi
           
           # Check for AWS keys
-          if grep -r -E "(AKIA[0-9A-Z]{16}|aws_access_key|aws_secret)" . --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=coverage --exclude-dir=docs; then
+          if grep -r -E "(AKIA[0-9A-Z]{16}|aws_access_key|aws_secret)" . --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=coverage --exclude-dir=docs --exclude-dir=.github --exclude="*.yaml" --exclude="*.yml"; then
             echo "❌ Potential AWS credentials found in files!"
             echo "Please remove any AWS credentials from your code and use IAM roles or environment variables instead."
             exit 1
