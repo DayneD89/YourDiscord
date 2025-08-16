@@ -295,7 +295,7 @@ resource "discord_channel_permission" "channel_permissions" {
 # Messages
 resource "discord_message" "welcome" {
   channel_id = discord_text_channel.channels["welcome_start_here"].id
-  content    = templatefile("${path.module}/messages/welcome_message.txt", {
+  content    = templatefile("${path.module}/messages/welcome_message.md", {
     rules_channel_id = discord_text_channel.channels["rules_and_guide"].id
   })
 }
@@ -329,6 +329,11 @@ resource "discord_message" "channel_guide" {
 resource "discord_message" "contributing_guide" {
   channel_id = discord_text_channel.channels["governance_links"].id
   content    = file("${path.module}/messages/contributing_guide.md")
+  embed {
+    color = 6049509
+    title = "Terraform Provider"
+    url   = "https://registry.terraform.io/providers/Lucky3028/discord/latest/docs"
+  }
 }
 
 # Regional & Local (unchanged, positioned at end)

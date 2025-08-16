@@ -1,1 +1,0 @@
-By clicking ✅ you confirm you've read <#${rules_channel_id}> and agree to the rules, and that you are a supporter. React ✅ to get access.
