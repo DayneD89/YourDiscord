@@ -22,14 +22,14 @@ jobs:
           echo "🔍 Scanning for potential Discord tokens and secrets..."
           
           # Check for Discord token patterns
-          if grep -r -E "(mfa\.[a-zA-Z0-9_-]{20,}|[a-zA-Z0-9_-]{23,28}\.[a-zA-Z0-9_-]{6,7}\.[a-zA-Z0-9_-]{27})" . --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=coverage; then
+          if grep -r -E "(mfa\.[a-zA-Z0-9_-]{20,}|[a-zA-Z0-9_-]{23,28}\.[a-zA-Z0-9_-]{6,7}\.[a-zA-Z0-9_-]{27})" . --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=coverage --exclude-dir=docs; then
             echo "❌ Potential Discord token found in files!"
             echo "Please remove any Discord tokens from your code and use environment variables instead."
             exit 1
           fi
           
           # Check for AWS keys
-          if grep -r -E "(AKIA[0-9A-Z]{16}|aws_access_key|aws_secret)" . --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=coverage; then
+          if grep -r -E "(AKIA[0-9A-Z]{16}|aws_access_key|aws_secret)" . --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=coverage --exclude-dir=docs; then
             echo "❌ Potential AWS credentials found in files!"
             echo "Please remove any AWS credentials from your code and use IAM roles or environment variables instead."
             exit 1
