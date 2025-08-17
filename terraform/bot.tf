@@ -33,6 +33,7 @@ resource "aws_iam_instance_profile" "ec2" {
 }
 
 data "aws_iam_policy_document" "ec2_policy" {
+  # S3 permissions for config storage and bot code
   statement {
     actions   = ["s3:ListBucket"]
     resources = [
@@ -43,6 +44,23 @@ data "aws_iam_policy_document" "ec2_policy" {
     actions   = ["s3:*"]
     resources = [
       "arn:aws:s3:::yourdiscord-terraform-state/bot/*"
+    ]
+  }
+  
+  # DynamoDB permissions for proposal storage
+  statement {
+    actions = [
+      "dynamodb:PutItem",
+      "dynamodb:GetItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:Query",
+      "dynamodb:Scan",
+      "dynamodb:DescribeTable"
+    ]
+    resources = [
+      aws_dynamodb_table.proposals.arn,
+      "${aws_dynamodb_table.proposals.arn}/index/*"
     ]
   }
 }
@@ -138,11 +156,19 @@ locals {
         voteDuration= var.env == "main" ? 259200000 : 300000
         formats=["Governance"]
       }
+      moderator = {
+        debateChannelId=local.channels["governance_debate"]
+        voteChannelId=local.channels["governance_vote"]
+        supportThreshold=var.env == "main" ? 3 : 1
+        voteDuration= var.env == "main" ? 259200000 : 300000
+        formats=["Add Moderator", "Remove Moderator"]
+      }
     })
     s3_bucket          = aws_s3_object.bot_code.bucket
     s3_key             = aws_s3_object.bot_code.key
     code_hash          = data.archive_file.bot_code.output_md5
-    config             = local.config
+    reactionRoleConfig = local.config
+    dynamodb_table     = aws_dynamodb_table.proposals.name
     network_type       = var.use_private_subnet ? "private" : "public"
   })
   
@@ -172,11 +198,18 @@ locals {
         voteDuration= var.env == "main" ? 259200000 : 300000
         formats=["Governance"]
       }
+      moderator = {
+        debateChannelId=local.channels["governance_debate"]
+        voteChannelId=local.channels["governance_vote"]
+        supportThreshold=var.env == "main" ? 3 : 1
+        voteDuration= var.env == "main" ? 259200000 : 300000
+        formats=["Add Moderator", "Remove Moderator"]
+      }
     })
     s3_bucket          = aws_s3_object.bot_code.bucket
     s3_key             = aws_s3_object.bot_code.key
     code_hash          = data.archive_file.bot_code.output_md5
-    config             = local.config
+    reactionRoleConfig = local.config
   })
 }
 
@@ -214,40 +247,119 @@ resource "aws_s3_object" "bot_code" {
 # DISCORD BOT INSTANCE 
 # =============================================================================
 
-# Single bot instance with enhanced features
-resource "aws_instance" "bot" {
-  ami                    = data.aws_ami.al2023_arm.id
-  instance_type          = var.env == "main" ? "t4g.micro" : "t4g.nano"
-  subnet_id              = local.selected_subnet_id
+# Launch template for zero-downtime deployments
+resource "aws_launch_template" "bot" {
+  name_prefix   = "${local.name}-"
+  description   = "Launch template for Discord bot with health checking"
+  
+  image_id      = data.aws_ami.al2023_arm.id
+  instance_type = var.env == "main" ? "t4g.micro" : "t4g.nano"
+  key_name      = "yourdiscord"
+  
   vpc_security_group_ids = [aws_security_group.bot_enhanced.id]
-  iam_instance_profile   = aws_iam_instance_profile.ec2.name
-  key_name               = "yourdiscord"
-
-  user_data                   = local.user_data_enhanced
-  user_data_replace_on_change = true
-
-  root_block_device {
-    volume_size = "30"
-    volume_type = "gp3"
+  
+  iam_instance_profile {
+    name = aws_iam_instance_profile.ec2.name
   }
-
-  tags = {
-    Name = local.name
-    Network = var.use_private_subnet ? "Private" : "Public" 
-    HealthCheck = "Enabled"
+  
+  user_data = base64encode(local.user_data_enhanced)
+  
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    ebs {
+      volume_size = 30
+      volume_type = "gp3"
+      encrypted   = true
+      delete_on_termination = true
+    }
   }
-
-  depends_on = [
-    aws_s3_object.bot_code,
-    aws_nat_gateway.bot  # Ensure NAT is ready for private subnet (if using private)
-  ]
-
+  
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name = local.name
+      Network = var.use_private_subnet ? "Private" : "Public"
+      HealthCheck = "Enabled"
+      Environment = var.env
+    }
+  }
+  
   lifecycle {
     create_before_destroy = true
   }
 }
 
+# Auto Scaling Group for zero-downtime deployments
+resource "aws_autoscaling_group" "bot" {
+  name                = "${local.name}-asg"
+  vpc_zone_identifier = [local.selected_subnet_id]
+  health_check_type   = "EC2"  # Use EC2 health checks instead of ELB
+  health_check_grace_period = 300  # 5 minutes for bot to start and report ready
+  
+  min_size         = 1
+  max_size         = 2
+  desired_capacity = 1
+  
+  # Zero-downtime deployment settings
+  wait_for_capacity_timeout = "10m"
+  
+  launch_template {
+    id      = aws_launch_template.bot.id
+    version = "$Latest"
+  }
+  
+  # Instance refresh for deployments
+  instance_refresh {
+    strategy = "Rolling"
+    preferences {
+      min_healthy_percentage = 50
+      instance_warmup       = 300  # Wait 5 minutes for new instance to be healthy
+      checkpoint_delay      = 600  # Wait 10 minutes between instance replacements
+    }
+    triggers = ["tag", "launch_template"]
+  }
+  
+  tag {
+    key                 = "Name"
+    value               = "${local.name}-asg"
+    propagate_at_launch = false
+  }
+  
+  tag {
+    key                 = "Environment"
+    value               = var.env
+    propagate_at_launch = true
+  }
+  
+  tag {
+    key                 = "HealthCheck"
+    value               = "Enabled"
+    propagate_at_launch = true
+  }
+  
+  depends_on = [
+    aws_s3_object.bot_code,
+    aws_nat_gateway.bot  # Ensure NAT is ready for private subnet (if using private)
+  ]
+}
+
 resource "aws_cloudwatch_log_group" "bot" {
   name              = "/ec2/${local.name}-logs"
   retention_in_days = 7
+}
+
+# Output for monitoring deployment status
+output "asg_name" {
+  description = "Name of the Auto Scaling Group for deployment monitoring"
+  value       = aws_autoscaling_group.bot.name
+}
+
+output "launch_template_version" {
+  description = "Launch template version for deployment tracking"
+  value       = aws_launch_template.bot.latest_version
+}
+
+output "health_check_url" {
+  description = "Health check endpoint URL (internal access only)"
+  value       = "http://<instance-ip>:3000/health"
 }

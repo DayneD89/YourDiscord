@@ -122,7 +122,7 @@ locals {
             key = "governance_debate"
             topic = "Propose and debate governance resolutions"
             sync_perms_with_category = false
-            messages = ["governance_proposal_guide"]
+            messages = ["governance_proposal_guide", "moderator_guide"]
             permissions = {
               everyone = "hide_view"
               member = "read_post"

@@ -66,8 +66,8 @@ cat > runtime.config.json <<JSON
   "commandChannelId": "${command_channel_id}",
   "memberCommandChannelId": "${member_command_channel_id}",
   "proposalConfig": ${proposalConfig},
-  "s3Bucket": "${s3_bucket}",
-  "config": ${config}
+  "dynamodbTable": "${dynamodb_table}",
+  "reactionRoleConfig": ${reactionRoleConfig}
 }
 JSON
 

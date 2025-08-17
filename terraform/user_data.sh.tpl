@@ -51,8 +51,7 @@ cat > runtime.config.json <<JSON
   "commandChannelId": "${command_channel_id}",
   "memberCommandChannelId": "${member_command_channel_id}",
   "proposalConfig": ${proposalConfig},
-  "s3Bucket": "${s3_bucket}",
-  "config": ${config}
+  "reactionRoleConfig": ${reactionRoleConfig}
 }
 JSON
 
