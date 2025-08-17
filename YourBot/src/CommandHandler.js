@@ -44,13 +44,7 @@ class CommandHandler {
         }
 
         // Moderator-only commands
-        if (content.startsWith('!addconfig ')) {
-            await this.handleAddConfig(message, content.substring(11));
-        } else if (content.startsWith('!removeconfig ')) {
-            await this.handleRemoveConfig(message, content.substring(14));
-        } else if (content === '!viewconfig') {
-            await this.handleViewConfig(message);
-        } else if (content.startsWith('!forcevote ')) {
+        if (content.startsWith('!forcevote ')) {
             await this.handleForceVote(message, content.substring(11));
         } else if (content === '!help') {
             await this.handleModeratorHelp(message);
@@ -88,167 +82,44 @@ class CommandHandler {
         }
     }
 
-    async handleAddConfig(message, configJson) {
-        try {
-            const newConfig = JSON.parse(configJson);
-            await this.bot.getConfigManager().addConfig(newConfig);
-            
-            console.log('Added new config:', newConfig);
-            await message.reply(`✅ Config added successfully! Total configs: ${this.bot.getConfig().length}`);
-
-        } catch (error) {
-            console.error('Error adding config:', error);
-            if (error instanceof SyntaxError) {
-                await message.reply('❌ Invalid JSON format. Please check your config and try again.');
-            } else {
-                await message.reply(`❌ ${error.message}`);
-            }
-        }
-    }
-
-    async handleRemoveConfig(message, params) {
-        try {
-            const [messageId, action] = params.split(' ');
-            
-            if (!messageId || !action) {
-                await message.reply('❌ Usage: `!removeconfig <message_id> <action>`');
-                return;
-            }
-
-            await this.bot.getConfigManager().removeConfig(messageId, action);
-            
-            console.log(`Removed config for message ${messageId} with action ${action}`);
-            await message.reply(`✅ Config removed successfully! Remaining configs: ${this.bot.getConfig().length}`);
-
-        } catch (error) {
-            console.error('Error removing config:', error);
-            await message.reply(`❌ ${error.message}`);
-        }
-    }
-
-    async handleViewConfig(message) {
-        try {
-            const config = this.bot.getConfig();
-            
-            if (config.length === 0) {
-                await message.reply('📋 No configurations currently set.');
-                return;
-            }
-
-            // Create a formatted display with message links
-            let configDisplay = `📋 **Current Configuration** (${config.length} items):\n\n`;
-            
-            for (let i = 0; i < config.length; i++) {
-                const cfg = config[i];
-                configDisplay += `**${i + 1}.** React ${cfg.action} on message \`${cfg.from}\`\n`;
-                
-                // Try to find the channel for this message
-                try {
-                    const guild = message.guild;
-                    let foundChannel = null;
-                    
-                    // Search through channels to find the message
-                    for (const [channelId, channel] of guild.channels.cache) {
-                        if (channel.isTextBased()) {
-                            try {
-                                await channel.messages.fetch(cfg.from);
-                                foundChannel = channel;
-                                break;
-                            } catch (err) {
-                                // Message not in this channel, continue searching
-                            }
-                        }
-                    }
-                    
-                    if (foundChannel) {
-                        configDisplay += `   🔗 <https://discord.com/channels/${this.bot.getGuildId()}/${foundChannel.id}/${cfg.from}>\n`;
-                    } else {
-                        configDisplay += `   📍 Message ID: \`${cfg.from}\` (channel not found)\n`;
-                    }
-                } catch (err) {
-                    configDisplay += `   📍 Message ID: \`${cfg.from}\`\n`;
-                }
-                
-                if (cfg.to) configDisplay += `   ➕ Add: \`${cfg.to}\`\n`;
-                if (cfg.unto) configDisplay += `   ➖ Remove: \`${cfg.unto}\`\n`;
-                configDisplay += '\n';
-            }
-
-            // If the display is too long, fall back to simpler format
-            if (configDisplay.length > 1900) {
-                let simpleDisplay = `📋 **Current Configuration** (${config.length} items):\n\n`;
-                config.forEach((cfg, index) => {
-                    simpleDisplay += `**${index + 1}.** Message \`${cfg.from}\` → ${cfg.action}\n`;
-                    if (cfg.to) simpleDisplay += `   ➕ \`${cfg.to}\`\n`;
-                    if (cfg.unto) simpleDisplay += `   ➖ \`${cfg.unto}\`\n`;
-                    simpleDisplay += '\n';
-                });
-                
-                if (simpleDisplay.length > 1900) {
-                    // Ultimate fallback to JSON
-                    const configText = JSON.stringify(config, null, 2);
-                    const chunks = this.splitMessage(configText, 1900);
-                    await message.reply(`📋 Current configuration (${config.length} items):`);
-                    
-                    for (const chunk of chunks) {
-                        await message.channel.send(`\`\`\`json\n${chunk}\n\`\`\``);
-                    }
-                } else {
-                    await message.reply(simpleDisplay);
-                }
-            } else {
-                await message.reply(configDisplay);
-            }
-
-        } catch (error) {
-            console.error('Error viewing config:', error);
-            await message.reply('❌ An error occurred while retrieving the config.');
-        }
-    }
 
     async handleViewProposals(message) {
         try {
-            const allProposals = this.bot.getProposalManager().getAllProposals();
+            // Get pending proposals (gathering support) - these are the most relevant
+            const pendingProposals = await this.bot.getProposalManager().getPendingProposals();
             
-            if (allProposals.length === 0) {
-                await message.reply('📋 No proposals currently tracked.');
+            if (pendingProposals.length === 0) {
+                await message.reply('📋 No pending proposals found. Post a proposal in a debate channel to get started!');
                 return;
             }
 
-            let proposalsDisplay = `📋 **All Proposals** (${allProposals.length} items):\n\n`;
+            // Show up to 5 most supported pending proposals
+            const topPending = pendingProposals.slice(0, 5);
+            let proposalsDisplay = `📋 **Pending Proposals** (${topPending.length} of ${pendingProposals.length} shown):\n\n`;
             
-            allProposals.forEach((proposal, index) => {
-                const status = this.getStatusEmoji(proposal.status);
-                const author = `<@${proposal.authorId}>`;
-                const content = proposal.content.substring(0, 100) + (proposal.content.length > 100 ? '...' : '');
-                const type = proposal.proposalType ? ` (${proposal.proposalType})` : '';
+            topPending.forEach((proposal, index) => {
+                const withdrawalText = proposal.isWithdrawal ? ' WITHDRAWAL' : '';
+                const progress = `${proposal.supportCount}/${proposal.requiredSupport}`;
+                const progressBar = this.createProgressBar(proposal.supportCount, proposal.requiredSupport);
                 
-                proposalsDisplay += `**${index + 1}.** ${status} ${proposal.status.toUpperCase()}${type}\n`;
-                proposalsDisplay += `   👤 ${author}\n`;
-                proposalsDisplay += `   📝 ${content}\n`;
+                // Create clickable link to the proposal message
+                const messageLink = `https://discord.com/channels/${message.guildId}/${proposal.channelId}/${proposal.messageId}`;
                 
-                if (proposal.status === 'voting') {
-                    const timeLeft = this.getTimeLeft(proposal.endTime);
-                    proposalsDisplay += `   🗳️ Votes: ✅${proposal.yesVotes} ❌${proposal.noVotes} | ${timeLeft}\n`;
-                } else if (proposal.status === 'passed' || proposal.status === 'failed') {
-                    proposalsDisplay += `   🗳️ Final: ✅${proposal.finalYes} ❌${proposal.finalNo}\n`;
-                }
-                proposalsDisplay += '\n';
+                // Extract and truncate proposal content
+                const content = proposal.content.substring(0, 80) + (proposal.content.length > 80 ? '...' : '');
+                
+                proposalsDisplay += `**${index + 1}.** 📋 ${proposal.proposalType.toUpperCase()}${withdrawalText}\n`;
+                proposalsDisplay += `   👤 ${proposal.author.tag}\n`;
+                proposalsDisplay += `   📝 [${content}](${messageLink})\n`;
+                proposalsDisplay += `   ✅ ${progress} support ${progressBar}\n\n`;
             });
 
-            // Split message if too long
-            if (proposalsDisplay.length > 1900) {
-                const chunks = this.splitMessage(proposalsDisplay, 1900);
-                for (let i = 0; i < chunks.length; i++) {
-                    if (i === 0) {
-                        await message.reply(chunks[i]);
-                    } else {
-                        await message.channel.send(chunks[i]);
-                    }
-                }
-            } else {
-                await message.reply(proposalsDisplay);
+            proposalsDisplay += `💡 **Click the links to view full proposals and add your ✅ reaction to support them!**\n`;
+            if (pendingProposals.length > 5) {
+                proposalsDisplay += `\n📊 Showing top 5 of ${pendingProposals.length} proposals with reactions.`;
             }
+
+            await message.reply(proposalsDisplay);
 
         } catch (error) {
             console.error('Error viewing proposals:', error);
@@ -369,28 +240,14 @@ class CommandHandler {
 
         const helpText = `**🤖 Moderator Bot Commands**
 
-**Reaction Config Commands:**
-\`!addconfig <json>\` - Add a new reaction config
-\`!removeconfig <message_id> <action>\` - Remove a config
-\`!viewconfig\` - View current reaction configuration
-
 **Proposal Management:**
-\`!proposals\` - View all proposals and their status
+\`!proposals\` - View pending proposals needing support
 \`!activevotes\` - View currently active votes
 \`!voteinfo <vote_message_id>\` - Get detailed info about a specific vote
 \`!forcevote <vote_message_id>\` - Force end an active vote (emergency)
 
 \`!help\` - Show this help message
-
-**📝 Config Structure:**
-\`{"from": "MESSAGE_ID", "action": "EMOJI", "to": "ACTION", "unto": "ACTION"}\`
-
-**⚙️ Available Actions:**
-- \`AddRole(user_id,'role_name')\`
-- \`RemoveRole(user_id,'role_name')\`
 ${proposalInfo}
-**💾 Note:** All changes are saved to S3 and persist across restarts.
-
 **👥 Members can use \`!proposals\`, \`!activevotes\`, and \`!voteinfo\` in their bot channel.**`;
 
         await message.reply(helpText);
@@ -407,6 +264,15 @@ ${proposalInfo}
                 proposalInfo += `  Need ${config.supportThreshold} ✅ reactions to advance to voting\n`;
             });
             proposalInfo += '\n**Voting**: React ✅ (support) or ❌ (oppose) in vote channels\n';
+            
+            // Add moderator-specific information if moderator type exists
+            if (proposalConfig.moderator) {
+                proposalInfo += '\n**👑 Moderator Management:**\n';
+                proposalInfo += `- **Request moderator role**: Post in <#${proposalConfig.moderator.debateChannelId}> using **Add Moderator**: @username\n`;
+                proposalInfo += `- **Remove moderator role**: Post using **Remove Moderator**: @username\n`;
+                proposalInfo += `  Need ${proposalConfig.moderator.supportThreshold} ✅ reactions to advance to voting\n`;
+                proposalInfo += '  Passed votes will directly add/remove moderator roles\n';
+            }
         }
 
         const helpText = `**🤖 Member Bot Commands**
@@ -430,6 +296,13 @@ ${proposalInfo}
             case 'failed': return '❌';
             default: return '📝';
         }
+    }
+
+    // Create a visual progress bar for proposal support
+    createProgressBar(current, required, length = 8) {
+        const filled = Math.min(Math.floor((current / required) * length), length);
+        const empty = length - filled;
+        return '█'.repeat(filled) + '░'.repeat(empty);
     }
 
     getTimeLeft(endTime) {

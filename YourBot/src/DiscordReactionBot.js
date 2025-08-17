@@ -66,18 +66,14 @@ class DiscordReactionBot {
             console.log(`Member Command Channel ID: ${this.memberCommandChannelId}`);
             console.log(`Proposal config loaded with types:`, Object.keys(runtimeConfig.proposalConfig || {}));
 
-            // Initialize S3-backed configuration manager
-            // Reaction configurations are stored in S3 for persistence across deployments
-            await this.configManager.initialize(
-                runtimeConfig.s3Bucket,
-                this.guildId,
-                runtimeConfig.config
-            );
+            // Initialize launch-time reaction role configuration
+            // Reaction role configurations are provided via runtime config and stored in memory only
+            this.configManager.initialize(runtimeConfig.reactionRoleConfig || []);
 
-            // Initialize community proposal/voting system
-            // This enables democratic governance features for the community
+            // Initialize community proposal/voting system with DynamoDB storage
+            // This enables democratic governance features with hybrid storage approach
             await this.proposalManager.initialize(
-                runtimeConfig.s3Bucket,
+                runtimeConfig.dynamodbTable,
                 this.guildId,
                 runtimeConfig.proposalConfig
             );
@@ -137,6 +133,11 @@ class DiscordReactionBot {
                 console.log('Pre-caching active vote messages...');
                 await this.preCacheVoteMessages(activeVotes);
             }
+
+            // Post deployment confirmation message to moderator bot channel
+            // Helps confirm new deployments are successful and bot is fully operational
+            await this.postDeploymentConfirmation();
+
         });
 
         // Core Discord event handlers - delegate to specialized modules for processing
@@ -166,14 +167,16 @@ class DiscordReactionBot {
 
         // Graceful shutdown handlers for clean deployments
         // These ensure the bot disconnects properly and doesn't leave hanging connections
-        process.on('SIGINT', () => {
+        process.on('SIGINT', async () => {
             console.log('Shutting down...');
+            await this.postShutdownMessage('Manual shutdown (SIGINT)');
             this.client.destroy();
             process.exit(0);
         });
 
-        process.on('SIGTERM', () => {
+        process.on('SIGTERM', async () => {
             console.log('Received SIGTERM, shutting down...');
+            await this.postShutdownMessage('Instance termination (SIGTERM)');
             this.client.destroy();
             process.exit(0);
         });
@@ -263,6 +266,101 @@ class DiscordReactionBot {
             }
         }
     }
+
+    // Post a brief confirmation message to moderator bot channel after successful startup
+    // Provides sanity check that new deployment is online and fully operational
+    async postDeploymentConfirmation() {
+        try {
+            console.log(`🔍 Attempting to post deployment confirmation...`);
+            console.log(`🔍 Guild ID: ${this.guildId}`);
+            console.log(`🔍 Command Channel ID: ${this.commandChannelId}`);
+            
+            const guild = this.client.guilds.cache.get(this.guildId);
+            if (!guild) {
+                console.error(`❌ Guild not found for deployment confirmation. Guild ID: ${this.guildId}`);
+                console.error(`❌ Available guilds: ${Array.from(this.client.guilds.cache.keys()).join(', ')}`);
+                return;
+            }
+            console.log(`✅ Found guild: ${guild.name} (${guild.id})`);
+
+            const modBotChannel = guild.channels.cache.get(this.commandChannelId);
+            if (!modBotChannel) {
+                console.error(`❌ Moderator bot channel not found. Channel ID: ${this.commandChannelId}`);
+                console.error(`❌ Available channels in guild:`);
+                guild.channels.cache.forEach(channel => {
+                    console.error(`   - ${channel.name} (${channel.id}) - Type: ${channel.type}`);
+                });
+                return;
+            }
+            console.log(`✅ Found channel: ${modBotChannel.name} (${modBotChannel.id})`);
+
+            // Check bot permissions in the channel
+            const botMember = guild.members.cache.get(this.client.user.id);
+            if (!botMember) {
+                console.error(`❌ Bot member not found in guild`);
+                return;
+            }
+            
+            const permissions = modBotChannel.permissionsFor(botMember);
+            if (!permissions.has('SendMessages')) {
+                console.error(`❌ Bot does not have SendMessages permission in ${modBotChannel.name}`);
+                console.error(`❌ Bot permissions: ${permissions.toArray().join(', ')}`);
+                return;
+            }
+            console.log(`✅ Bot has SendMessages permission in ${modBotChannel.name}`);
+
+            const timestamp = new Date().toISOString();
+            const confirmationMessage = `🤖 **Bot Online** - New version deployed and ready (${timestamp})`;
+
+            await modBotChannel.send(confirmationMessage);
+            console.log(`✅ Posted deployment confirmation to ${modBotChannel.name} channel`);
+            
+        } catch (error) {
+            console.error('❌ Error posting deployment confirmation:', error);
+            console.error('❌ Error stack:', error.stack);
+        }
+    }
+
+    // Post a brief shutdown message to moderator bot channel before terminating
+    // Provides visibility when instances are being replaced during deployments
+    async postShutdownMessage(reason) {
+        try {
+            // Set a timeout to ensure we don't block shutdown too long
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Shutdown message timeout')), 5000)
+            );
+
+            const messagePromise = this.sendShutdownMessage(reason);
+            
+            // Race between sending message and timeout
+            await Promise.race([messagePromise, timeoutPromise]);
+            
+        } catch (error) {
+            console.error('Error posting shutdown message:', error);
+            // Don't block shutdown even if message fails
+        }
+    }
+
+    async sendShutdownMessage(reason) {
+        const guild = this.client.guilds.cache.get(this.guildId);
+        if (!guild) {
+            console.log('❌ Guild not found for shutdown message');
+            return;
+        }
+
+        const modBotChannel = guild.channels.cache.get(this.commandChannelId);
+        if (!modBotChannel) {
+            console.log(`❌ Moderator bot channel ${this.commandChannelId} not found`);
+            return;
+        }
+
+        const timestamp = new Date().toISOString();
+        const shutdownMessage = `🔄 **Bot Shutting Down** - ${reason} (${timestamp})`;
+
+        await modBotChannel.send(shutdownMessage);
+        console.log(`✅ Posted shutdown message to moderator bot channel`);
+    }
+
 }
 
 module.exports = DiscordReactionBot;

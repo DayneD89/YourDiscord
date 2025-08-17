@@ -80,9 +80,6 @@ describe('CommandHandler', () => {
   describe('handleModeratorCommand', () => {
     beforeEach(() => {
       jest.spyOn(commandHandler, 'handleModeratorHelp').mockResolvedValue();
-      jest.spyOn(commandHandler, 'handleAddConfig').mockResolvedValue();
-      jest.spyOn(commandHandler, 'handleRemoveConfig').mockResolvedValue();
-      jest.spyOn(commandHandler, 'handleViewConfig').mockResolvedValue();
       jest.spyOn(commandHandler, 'handleViewProposals').mockResolvedValue();
       jest.spyOn(commandHandler, 'handleActiveVotes').mockResolvedValue();
       jest.spyOn(commandHandler, 'handleVoteInfo').mockResolvedValue();
@@ -103,23 +100,6 @@ describe('CommandHandler', () => {
       expect(commandHandler.handleModeratorHelp).toHaveBeenCalledWith(mockMessage);
     });
 
-    it('should handle !addconfig command', async () => {
-      await commandHandler.handleModeratorCommand(mockMessage, mockMember, '!addconfig {"test": "config"}', true);
-
-      expect(commandHandler.handleAddConfig).toHaveBeenCalledWith(mockMessage, '{"test": "config"}');
-    });
-
-    it('should handle !removeconfig command', async () => {
-      await commandHandler.handleModeratorCommand(mockMessage, mockMember, '!removeconfig msg123 emoji', true);
-
-      expect(commandHandler.handleRemoveConfig).toHaveBeenCalledWith(mockMessage, 'msg123 emoji');
-    });
-
-    it('should handle !viewconfig command', async () => {
-      await commandHandler.handleModeratorCommand(mockMessage, mockMember, '!viewconfig', true);
-
-      expect(commandHandler.handleViewConfig).toHaveBeenCalledWith(mockMessage);
-    });
 
     it('should handle !proposals command', async () => {
       await commandHandler.handleModeratorCommand(mockMessage, mockMember, '!proposals', true);
@@ -203,168 +183,58 @@ describe('CommandHandler', () => {
     });
   });
 
-  describe('handleAddConfig', () => {
-    it('should add valid config successfully', async () => {
-      const configJson = '{"from": "msg123", "action": "emoji", "to": "AddRole(user_id,\'member\')"}';
-      mockBot.configManager.addConfig.mockResolvedValue();
-      mockBot.getConfig = jest.fn(() => [{ from: 'msg123' }]);
-      
-      await commandHandler.handleAddConfig(mockMessage, configJson);
-
-      expect(mockBot.configManager.addConfig).toHaveBeenCalledWith({
-        from: 'msg123',
-        action: 'emoji',
-        to: "AddRole(user_id,'member')"
-      });
-      expect(mockMessage.reply).toHaveBeenCalledWith(
-        expect.stringContaining('✅ Config added successfully!')
-      );
-    });
-
-    it('should handle invalid JSON', async () => {
-      const invalidJson = '{"from": "msg123", "action":}';
-      
-      await commandHandler.handleAddConfig(mockMessage, invalidJson);
-
-      expect(mockMessage.reply).toHaveBeenCalledWith(
-        '❌ Invalid JSON format. Please check your config and try again.'
-      );
-    });
-
-    it('should handle config manager errors', async () => {
-      const configJson = '{"from": "msg123", "action": "emoji"}';
-      mockBot.configManager.addConfig.mockRejectedValue(new Error('Config validation failed'));
-      
-      await commandHandler.handleAddConfig(mockMessage, configJson);
-
-      expect(mockMessage.reply).toHaveBeenCalledWith('❌ Config validation failed');
-    });
-  });
-
-  describe('handleRemoveConfig', () => {
-    it('should remove config successfully', async () => {
-      mockBot.configManager.removeConfig.mockResolvedValue();
-      mockBot.getConfig = jest.fn(() => []);
-      
-      await commandHandler.handleRemoveConfig(mockMessage, 'msg123 emoji');
-
-      expect(mockBot.configManager.removeConfig).toHaveBeenCalledWith('msg123', 'emoji');
-      expect(mockMessage.reply).toHaveBeenCalledWith(
-        expect.stringContaining('✅ Config removed successfully!')
-      );
-    });
-
-    it('should handle invalid parameters', async () => {
-      await commandHandler.handleRemoveConfig(mockMessage, 'msg123');
-
-      expect(mockMessage.reply).toHaveBeenCalledWith(
-        '❌ Usage: `!removeconfig <message_id> <action>`'
-      );
-    });
-
-    it('should handle config manager errors', async () => {
-      mockBot.configManager.removeConfig.mockRejectedValue(new Error('Config not found'));
-      
-      await commandHandler.handleRemoveConfig(mockMessage, 'msg123 emoji');
-
-      expect(mockMessage.reply).toHaveBeenCalledWith('❌ Config not found');
-    });
-  });
-
-  describe('handleViewConfig', () => {
-    it('should display empty config message', async () => {
-      mockBot.getConfig = jest.fn(() => []);
-      
-      await commandHandler.handleViewConfig(mockMessage);
-
-      expect(mockMessage.reply).toHaveBeenCalledWith('📋 No configurations currently set.');
-    });
-
-    it('should display single config', async () => {
-      const mockConfig = [{ from: 'msg123', action: 'emoji', to: 'AddRole(user_id,"member")' }];
-      mockBot.getConfig = jest.fn(() => mockConfig);
-      mockBot.getGuildId = jest.fn(() => 'guild123');
-      
-      // Mock channel search
-      const mockChannel = { isTextBased: () => true, messages: { fetch: jest.fn().mockResolvedValue({}) } };
-      mockGuild.channels.cache.set('channel123', mockChannel);
-      
-      await commandHandler.handleViewConfig(mockMessage);
-
-      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Current Configuration'));
-      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('msg123'));
-    });
-
-    it('should handle long config with JSON fallback', async () => {
-      const longConfig = Array(50).fill().map((_, i) => ({
-        from: `msg${i}`,
-        action: 'emoji',
-        to: 'AddRole(user_id,"member")'
-      }));
-      mockBot.getConfig = jest.fn(() => longConfig);
-      
-      await commandHandler.handleViewConfig(mockMessage);
-
-      expect(mockMessage.reply).toHaveBeenCalled();
-      expect(mockMessage.channel.send).toHaveBeenCalled();
-    });
-
-    it('should handle errors gracefully', async () => {
-      mockBot.getConfig = jest.fn(() => {
-        throw new Error('Config error');
-      });
-      
-      await commandHandler.handleViewConfig(mockMessage);
-
-      expect(mockMessage.reply).toHaveBeenCalledWith('❌ An error occurred while retrieving the config.');
-    });
-  });
 
   describe('handleViewProposals', () => {
     beforeEach(() => {
       mockBot.proposalManager = {
-        getAllProposals: jest.fn()
+        getPendingProposals: jest.fn()
       };
       mockBot.getProposalManager = jest.fn(() => mockBot.proposalManager);
     });
 
     it('should display no proposals message', async () => {
-      mockBot.proposalManager.getAllProposals.mockReturnValue([]);
+      mockBot.proposalManager.getPendingProposals.mockResolvedValue([]);
       
       await commandHandler.handleViewProposals(mockMessage);
 
-      expect(mockMessage.reply).toHaveBeenCalledWith('📋 No proposals currently tracked.');
+      expect(mockMessage.reply).toHaveBeenCalledWith('📋 No pending proposals found. Post a proposal in a debate channel to get started!');
     });
 
     it('should display proposals list', async () => {
       const mockProposals = [
         {
-          authorId: 'user123',
-          content: 'Test proposal',
-          status: 'voting',
-          endTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-          yesVotes: 5,
-          noVotes: 2,
-          proposalType: 'policy'
+          messageId: 'msg123',
+          channelId: 'channel123',
+          content: '**Policy**: Test proposal',
+          author: { tag: 'user#1234' },
+          supportCount: 3,
+          requiredSupport: 5,
+          proposalType: 'policy',
+          isWithdrawal: false
         }
       ];
-      mockBot.proposalManager.getAllProposals.mockReturnValue(mockProposals);
+      mockBot.proposalManager.getPendingProposals.mockResolvedValue(mockProposals);
+      mockMessage.guildId = 'guild123';
       
       await commandHandler.handleViewProposals(mockMessage);
 
-      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('All Proposals'));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Pending Proposals'));
       expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Test proposal'));
     });
 
     it('should handle long proposals list', async () => {
       const longProposals = Array(20).fill().map((_, i) => ({
-        authorId: `user${i}`,
+        messageId: `msg${i}`,
+        channelId: 'channel123',
         content: `Test proposal ${i} with very long content that should trigger message splitting behavior`,
-        status: 'passed',
-        finalYes: 10,
-        finalNo: 3
+        author: { tag: `user${i}#1234` },
+        supportCount: Math.floor(Math.random() * 5) + 1,
+        requiredSupport: 5,
+        proposalType: 'policy',
+        isWithdrawal: false
       }));
-      mockBot.proposalManager.getAllProposals.mockReturnValue(longProposals);
+      mockBot.proposalManager.getPendingProposals.mockResolvedValue(longProposals);
+      mockMessage.guildId = 'guild123';
       
       await commandHandler.handleViewProposals(mockMessage);
 
@@ -372,7 +242,7 @@ describe('CommandHandler', () => {
     });
 
     it('should handle errors gracefully', async () => {
-      mockBot.proposalManager.getAllProposals.mockImplementation(() => {
+      mockBot.proposalManager.getPendingProposals.mockImplementation(() => {
         throw new Error('Proposal error');
       });
       

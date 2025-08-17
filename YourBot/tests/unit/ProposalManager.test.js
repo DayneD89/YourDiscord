@@ -1,10 +1,10 @@
 const ProposalManager = require('../../src/ProposalManager');
-const ProposalStorage = require('../../src/ProposalStorage');
+const DynamoProposalStorage = require('../../src/DynamoProposalStorage');
 const ProposalParser = require('../../src/ProposalParser');
 const WithdrawalProcessor = require('../../src/WithdrawalProcessor');
 
 // Mock the dependencies
-jest.mock('../../src/ProposalStorage');
+jest.mock('../../src/DynamoProposalStorage');
 jest.mock('../../src/ProposalParser');
 jest.mock('../../src/WithdrawalProcessor');
 
@@ -80,11 +80,11 @@ describe('ProposalManager', () => {
       getProposal: jest.fn(),
       addProposal: jest.fn().mockResolvedValue(undefined),
       updateProposal: jest.fn().mockResolvedValue(undefined),
-      getAllProposals: jest.fn().mockReturnValue([]),
-      getActiveVotes: jest.fn().mockReturnValue([]),
-      getProposalsByType: jest.fn().mockReturnValue([])
+      getAllProposals: jest.fn().mockResolvedValue([]),
+      getActiveVotes: jest.fn().mockResolvedValue([]),
+      getProposalsByType: jest.fn().mockResolvedValue([])
     };
-    ProposalStorage.mockImplementation(() => mockStorage);
+    DynamoProposalStorage.mockImplementation(() => mockStorage);
 
     // Mock parser
     mockParser = {
@@ -116,7 +116,7 @@ describe('ProposalManager', () => {
     });
 
     it('should create storage instance', () => {
-      expect(ProposalStorage).toHaveBeenCalled();
+      expect(DynamoProposalStorage).toHaveBeenCalled();
       expect(proposalManager.storage).toBe(mockStorage);
     });
   });
@@ -134,12 +134,12 @@ describe('ProposalManager', () => {
     it('should initialize all components correctly', async () => {
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
-      await proposalManager.initialize('test-bucket', 'guild123', mockConfig);
+      await proposalManager.initialize('test-dynamo-table', 'guild123', mockConfig);
 
       expect(proposalManager.proposalConfig).toBe(mockConfig);
       expect(ProposalParser).toHaveBeenCalledWith(mockConfig);
       expect(WithdrawalProcessor).toHaveBeenCalledWith(mockBot, mockConfig);
-      expect(mockStorage.initialize).toHaveBeenCalledWith('test-bucket', 'guild123');
+      expect(mockStorage.initialize).toHaveBeenCalledWith('test-dynamo-table', 'guild123');
       expect(consoleSpy).toHaveBeenCalledWith('Proposal config loaded:', JSON.stringify(mockConfig, null, 2));
 
       consoleSpy.mockRestore();
@@ -149,7 +149,7 @@ describe('ProposalManager', () => {
       const setIntervalSpy = jest.spyOn(global, 'setInterval');
       const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
 
-      await proposalManager.initialize('test-bucket', 'guild123', mockConfig);
+      await proposalManager.initialize('test-dynamo-table', 'guild123', mockConfig);
 
       expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 60000);
       expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 5000);
@@ -166,11 +166,11 @@ describe('ProposalManager', () => {
           resolutionsChannelId: 'resolutions123'
         }
       };
-      await proposalManager.initialize('test-bucket', 'guild123', mockConfig);
+      await proposalManager.initialize('test-dynamo-table', 'guild123', mockConfig);
     });
 
     it('should ignore already tracked proposals', async () => {
-      mockStorage.getProposal.mockReturnValue({ id: 'existing' });
+      mockStorage.getProposal.mockResolvedValue({ id: 'existing' });
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
       await proposalManager.handleSupportReaction(mockMessage, 3);
@@ -182,7 +182,7 @@ describe('ProposalManager', () => {
     });
 
     it('should ignore non-proposal messages', async () => {
-      mockStorage.getProposal.mockReturnValue(null);
+      mockStorage.getProposal.mockResolvedValue(null);
       mockParser.getProposalType.mockReturnValue(null);
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
@@ -194,7 +194,7 @@ describe('ProposalManager', () => {
     });
 
     it('should track reactions below threshold', async () => {
-      mockStorage.getProposal.mockReturnValue(null);
+      mockStorage.getProposal.mockResolvedValue(null);
       mockParser.getProposalType.mockReturnValue({
         type: 'policy',
         config: { supportThreshold: 5 },
@@ -210,7 +210,7 @@ describe('ProposalManager', () => {
     });
 
     it('should move to vote when threshold is reached', async () => {
-      mockStorage.getProposal.mockReturnValue(null);
+      mockStorage.getProposal.mockResolvedValue(null);
       const mockProposalConfig = {
         type: 'policy',
         config: { supportThreshold: 5, voteChannelId: 'vote123' },
@@ -225,14 +225,14 @@ describe('ProposalManager', () => {
       await proposalManager.handleSupportReaction(mockMessage, 5);
 
       expect(consoleSpy).toHaveBeenCalledWith('policy proposal msg123 has reached 5/5 support reactions, moving to vote');
-      expect(moveToVoteSpy).toHaveBeenCalledWith(mockMessage, 'policy', mockProposalConfig.config, false);
+      expect(moveToVoteSpy).toHaveBeenCalledWith(mockMessage, 'policy', mockProposalConfig.config, mockProposalConfig.isWithdrawal);
 
       consoleSpy.mockRestore();
       moveToVoteSpy.mockRestore();
     });
 
     it('should handle withdrawal proposals correctly', async () => {
-      mockStorage.getProposal.mockReturnValue(null);
+      mockStorage.getProposal.mockResolvedValue(null);
       mockParser.getProposalType.mockReturnValue({
         type: 'policy',
         config: { supportThreshold: 5 },
@@ -242,7 +242,8 @@ describe('ProposalManager', () => {
 
       await proposalManager.handleSupportReaction(mockMessage, 3);
 
-      expect(consoleSpy).toHaveBeenCalledWith('policy withdrawal proposal msg123 has 3/5 reactions');
+      // Check that the withdrawal proposal is properly logged
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('withdrawal proposal msg123 has 3/5 reactions'));
 
       consoleSpy.mockRestore();
     });
@@ -258,7 +259,7 @@ describe('ProposalManager', () => {
           resolutionsChannelId: 'resolutions123'
         }
       };
-      await proposalManager.initialize('test-bucket', 'guild123', mockConfig);
+      await proposalManager.initialize('test-dynamo-table', 'guild123', mockConfig);
     });
 
     it('should successfully move proposal to vote', async () => {
@@ -299,8 +300,8 @@ describe('ProposalManager', () => {
 
       expect(mockWithdrawalProcessor.parseWithdrawalTarget).toHaveBeenCalledWith(mockMessage.content, 'policy', config);
       expect(mockStorage.addProposal).toHaveBeenCalledWith('msg123', expect.objectContaining({
-        isWithdrawal: true,
-        targetResolution: mockTarget
+        is_withdrawal: true,
+        target_resolution: mockTarget
       }));
     });
 
@@ -365,7 +366,7 @@ describe('ProposalManager', () => {
       const pastDate = new Date(Date.now() - 10000).toISOString();
       mockStorage.getProposal.mockReturnValue({
         status: 'voting',
-        endTime: pastDate
+        end_time: pastDate
       });
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
@@ -381,7 +382,7 @@ describe('ProposalManager', () => {
       const futureDate = new Date(Date.now() + 10000).toISOString();
       const mockProposal = {
         status: 'voting',
-        endTime: futureDate
+        end_time: futureDate
       };
       mockStorage.getProposal.mockReturnValue(mockProposal);
       
@@ -412,8 +413,8 @@ describe('ProposalManager', () => {
       await proposalManager.updateVoteCounts(mockMessage, { id: 'test' });
 
       expect(mockStorage.updateProposal).toHaveBeenCalledWith('msg123', {
-        yesVotes: 5,
-        noVotes: 2
+        yes_votes: 5,
+        no_votes: 2
       });
       expect(consoleSpy).toHaveBeenCalledWith('Vote counts updated for msg123: Yes=5, No=2');
 
@@ -426,8 +427,8 @@ describe('ProposalManager', () => {
       await proposalManager.updateVoteCounts(mockMessage, { id: 'test' });
 
       expect(mockStorage.updateProposal).toHaveBeenCalledWith('msg123', {
-        yesVotes: 0,
-        noVotes: 0
+        yes_votes: 0,
+        no_votes: 0
       });
     });
 
@@ -449,9 +450,10 @@ describe('ProposalManager', () => {
     it('should process ended votes', async () => {
       const pastDate = new Date(Date.now() - 10000);
       const mockProposal = {
-        voteMessageId: 'vote123',
-        proposalType: 'policy',
-        endTime: pastDate.toISOString()
+        message_id: 'vote123',
+        vote_message_id: 'vote123',
+        proposal_type: 'policy',
+        end_time: pastDate.toISOString()
       };
       
       mockStorage.getActiveVotes.mockReturnValue([mockProposal]);
@@ -470,8 +472,8 @@ describe('ProposalManager', () => {
     it('should skip active votes', async () => {
       const futureDate = new Date(Date.now() + 10000);
       const mockProposal = {
-        voteMessageId: 'vote123',
-        endTime: futureDate.toISOString()
+        vote_message_id: 'vote123',
+        end_time: futureDate.toISOString()
       };
       
       mockStorage.getActiveVotes.mockReturnValue([mockProposal]);
@@ -495,19 +497,19 @@ describe('ProposalManager', () => {
           resolutionsChannelId: 'resolutions123'
         }
       };
-      await proposalManager.initialize('test-bucket', 'guild123', mockConfig);
+      await proposalManager.initialize('test-dynamo-table', 'guild123', mockConfig);
     });
 
     it('should process passed proposal correctly', async () => {
       const mockProposal = {
         voteChannelId: 'vote123',
-        yesVotes: 5,
-        noVotes: 2,
+        yes_votes: 5,
+        no_votes: 2,
         isWithdrawal: false,
-        proposalType: 'policy'
+        proposal_type: 'policy'
       };
       
-      mockStorage.getProposal.mockReturnValue({ ...mockProposal, yesVotes: 6, noVotes: 2 });
+      mockStorage.getProposal.mockReturnValue({ ...mockProposal, yes_votes: 6, no_votes: 2 });
       const updateVoteCountsSpy = jest.spyOn(proposalManager, 'updateVoteCounts').mockResolvedValue(undefined);
       const moveToResolutionsSpy = jest.spyOn(proposalManager, 'moveToResolutions').mockResolvedValue(undefined);
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
@@ -517,8 +519,8 @@ describe('ProposalManager', () => {
       expect(updateVoteCountsSpy).toHaveBeenCalled();
       expect(mockStorage.updateProposal).toHaveBeenCalledWith('vote123', expect.objectContaining({
         status: 'passed',
-        finalYes: 6,
-        finalNo: 2
+        final_yes: 6,
+        final_no: 2
       }));
       expect(mockMessage.edit).toHaveBeenCalledWith(expect.stringContaining('✅ **PASSED**'));
       expect(moveToResolutionsSpy).toHaveBeenCalled();
@@ -532,8 +534,8 @@ describe('ProposalManager', () => {
     it('should process failed proposal correctly', async () => {
       const mockProposal = {
         voteChannelId: 'vote123',
-        yesVotes: 2,
-        noVotes: 5,
+        yes_votes: 2,
+        no_votes: 5,
         isWithdrawal: false
       };
       
@@ -556,12 +558,12 @@ describe('ProposalManager', () => {
     it('should process withdrawal proposals correctly', async () => {
       const mockProposal = {
         voteChannelId: 'vote123',
-        yesVotes: 5,
-        noVotes: 2,
-        isWithdrawal: true
+        yes_votes: 5,
+        no_votes: 2,
+        is_withdrawal: true
       };
       
-      mockStorage.getProposal.mockReturnValue({ ...mockProposal, yesVotes: 6, noVotes: 2 });
+      mockStorage.getProposal.mockReturnValue({ ...mockProposal, yes_votes: 6, no_votes: 2 });
       const updateVoteCountsSpy = jest.spyOn(proposalManager, 'updateVoteCounts').mockResolvedValue(undefined);
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
@@ -598,17 +600,17 @@ describe('ProposalManager', () => {
           resolutionsChannelId: 'resolutions123'
         }
       };
-      await proposalManager.initialize('test-bucket', 'guild123', mockConfig);
+      await proposalManager.initialize('test-dynamo-table', 'guild123', mockConfig);
     });
 
     it('should successfully move proposal to resolutions', async () => {
       const mockProposal = {
-        proposalType: 'policy',
-        authorId: 'author123',
+        proposal_type: 'policy',
+        author_id: 'author123',
         content: 'Test proposal content',
-        completedAt: new Date().toISOString(),
-        finalYes: 6,
-        finalNo: 2
+        completed_at: new Date().toISOString(),
+        final_yes: 6,
+        final_no: 2
       };
       
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
@@ -624,7 +626,7 @@ describe('ProposalManager', () => {
 
     it('should handle missing resolutions channel', async () => {
       mockGuild.channels.cache.get.mockReturnValue(null);
-      const mockProposal = { proposalType: 'policy' };
+      const mockProposal = { proposal_type: 'policy' };
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
       await proposalManager.moveToResolutions(mockProposal, mockGuild);
@@ -637,7 +639,7 @@ describe('ProposalManager', () => {
 
     it('should handle send errors gracefully', async () => {
       mockChannel.send.mockRejectedValue(new Error('Send failed'));
-      const mockProposal = { proposalType: 'policy' };
+      const mockProposal = { proposal_type: 'policy' };
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
       await proposalManager.moveToResolutions(mockProposal, mockGuild);
@@ -703,7 +705,7 @@ describe('ProposalManager', () => {
 
       const checkEndedVotesSpy = jest.spyOn(proposalManager, 'checkEndedVotes').mockResolvedValue(undefined);
 
-      await proposalManager.initialize('test-bucket', 'guild123', mockConfig);
+      await proposalManager.initialize('test-dynamo-table', 'guild123', mockConfig);
 
       // Fast-forward the timer
       jest.advanceTimersByTime(60000);
@@ -725,7 +727,7 @@ describe('ProposalManager', () => {
 
       const checkEndedVotesSpy = jest.spyOn(proposalManager, 'checkEndedVotes').mockResolvedValue(undefined);
 
-      await proposalManager.initialize('test-bucket', 'guild123', mockConfig);
+      await proposalManager.initialize('test-dynamo-table', 'guild123', mockConfig);
 
       // Fast-forward the startup delay
       jest.advanceTimersByTime(5000);

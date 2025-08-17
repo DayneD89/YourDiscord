@@ -137,8 +137,8 @@ describe('DiscordReactionBot', () => {
       memberRoleId: 'member-role-123',
       commandChannelId: 'command-channel-123',
       memberCommandChannelId: 'member-command-channel-123',
-      s3Bucket: 'test-bucket',
-      config: [],
+      dynamodbTable: 'test-dynamo-table',
+      reactionRoleConfig: [],
       proposalConfig: {
         policy: {
           supportThreshold: 5,
@@ -166,18 +166,14 @@ describe('DiscordReactionBot', () => {
     it('should initialize config manager with runtime config', async () => {
       await bot.initialize();
 
-      expect(bot.configManager.initialize).toHaveBeenCalledWith(
-        'test-bucket',
-        'guild123',
-        []
-      );
+      expect(bot.configManager.initialize).toHaveBeenCalledWith([]);
     });
 
     it('should initialize proposal manager with runtime config', async () => {
       await bot.initialize();
 
       expect(bot.proposalManager.initialize).toHaveBeenCalledWith(
-        'test-bucket',
+        'test-dynamo-table',
         'guild123',
         mockRuntimeConfig.proposalConfig
       );
