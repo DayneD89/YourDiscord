@@ -3,35 +3,35 @@
 # Stores dynamic data while keeping static config in S3
 
 resource "aws_dynamodb_table" "proposals" {
-  name           = "discord-proposals-${var.env}"
-  billing_mode   = "PAY_PER_REQUEST"  # Serverless pricing - pay only for actual usage
-  hash_key       = "guild_id"   # Partition key - separates data by Discord server
-  range_key      = "message_id" # Sort key - allows multiple proposals per guild
+  name         = "discord-proposals-${var.env}"
+  billing_mode = "PAY_PER_REQUEST" # Serverless pricing - pay only for actual usage
+  hash_key     = "guild_id"        # Partition key - separates data by Discord server
+  range_key    = "message_id"      # Sort key - allows multiple proposals per guild
 
   # Define the table schema
   attribute {
     name = "guild_id"
-    type = "S"  # String - Discord guild (server) ID
+    type = "S" # String - Discord guild (server) ID
   }
 
   attribute {
     name = "message_id"
-    type = "S"  # String - Discord message ID (unique per proposal)
+    type = "S" # String - Discord message ID (unique per proposal)
   }
 
   attribute {
     name = "status"
-    type = "S"  # String - proposal status: voting, passed, failed
+    type = "S" # String - proposal status: voting, passed, failed
   }
 
   attribute {
     name = "proposal_type"
-    type = "S"  # String - type of proposal: policy, governance, etc.
+    type = "S" # String - type of proposal: policy, governance, etc.
   }
 
   attribute {
     name = "end_time"
-    type = "S"  # String - ISO timestamp when voting ends
+    type = "S" # String - ISO timestamp when voting ends
   }
 
   # Global Secondary Index for querying by status
@@ -40,7 +40,7 @@ resource "aws_dynamodb_table" "proposals" {
     name            = "status-index"
     hash_key        = "guild_id"
     range_key       = "status"
-    projection_type = "ALL"  # Include all attributes in index
+    projection_type = "ALL" # Include all attributes in index
   }
 
   # Global Secondary Index for querying by proposal type
