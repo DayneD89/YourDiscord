@@ -17,6 +17,8 @@ exec 2>&1
 
 echo "=== Starting Discord bot deployment at $(date) ==="
 echo "Code version: ${code_hash}"
+echo "Bot Run ID: ${run_id}"
+echo "Instance ID: $(curl -s http://169.254.169.254/latest/meta-data/instance-id)"
 echo "Network: ${network_type} subnet"
 echo "Will log to CloudWatch Logs group: /ec2/${name}-logs"
 
@@ -61,13 +63,16 @@ cat > runtime.config.json <<JSON
 {
   "guildId": "${guild_id}",
   "botToken": "${bot_token}",
+  "runId": "${run_id}",
   "moderatorRoleId": "${moderator_role_id}",
   "memberRoleId": "${member_role_id}",
   "commandChannelId": "${command_channel_id}",
   "memberCommandChannelId": "${member_command_channel_id}",
   "proposalConfig": ${proposalConfig},
   "dynamodbTable": "${dynamodb_table}",
-  "reactionRoleConfig": ${reactionRoleConfig}
+  "eventsTable": "${events_table}",
+  "reactionRoleConfig": ${reactionRoleConfig},
+  "reminderIntervals": ${reminderIntervals}
 }
 JSON
 

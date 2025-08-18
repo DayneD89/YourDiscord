@@ -58,6 +58,10 @@ class CommandHandler {
             await this.handleVoteInfo(message, content.substring(10));
         } else if (content === '!moderators') {
             await this.handleViewModerators(message);
+        } else if (content.startsWith('!addevent ')) {
+            await this.handleAddEvent(message, content.substring(10));
+        } else if (content.startsWith('!removeevent ')) {
+            await this.handleRemoveEvent(message, content.substring(13));
         } else {
             await message.reply('❓ Unknown moderator command. Type `!help` for available commands.');
         }
@@ -353,6 +357,11 @@ class CommandHandler {
 \`!voteinfo <vote_message_id>\` - Get detailed info about a specific vote
 \`!forcevote <vote_message_id>\` - Force end an active vote (emergency)
 
+**Event Management:**
+\`!addevent @RegionRole @LocationRole "Event Name" | YYYY-MM-DD HH:MM | <link>\` - Add new event
+\`!removeevent <event_id>\` - Remove an event by ID
+Example: \`!addevent @London @CentralLondon "Community Meeting" | 2024-08-25 18:00 | https://facebook.com/events/123\`
+
 **Community Information:**
 \`!moderators\` - View current server moderators
 \`!help\` - Show this help message
@@ -360,6 +369,168 @@ ${proposalInfo}
 **👥 Members can use \`!proposals\`, \`!activevotes\`, and \`!voteinfo\` in their bot channel.**`;
 
         await message.reply(helpText);
+    }
+
+    async handleAddEvent(message, eventArgs) {
+        try {
+            // Parse command arguments: !addevent @RegionRole @LocationRole <name> | <date> | <link>
+            // Format: !addevent @London @CentralLondon "Community Meeting" | 2024-08-25 18:00 | https://example.com/event
+            
+            if (!eventArgs.trim()) {
+                await message.reply('❌ **Event command format:**\n`!addevent @RegionRole @LocationRole "Event Name" | YYYY-MM-DD HH:MM | <link>`\n\n**Examples:**\n`!addevent @London @CentralLondon "Community Meeting" | 2024-08-25 18:00 | https://facebook.com/events/123`\n`!addevent @Wales @Cardiff "Rally" | 2024-08-30 14:00 | https://eventbrite.com/tickets/456`\n\n**Notes:**\n- Use @LocationRole for town/city, or omit if region-wide\n- Link is optional but recommended\n- Roles must exist in the server');
+                return;
+            }
+
+            // Split by pipes to get main parts
+            const parts = eventArgs.split('|').map(part => part.trim());
+            if (parts.length < 2) {
+                await message.reply('❌ **Invalid format.** Use: `!addevent @RegionRole @LocationRole "Event Name" | YYYY-MM-DD HH:MM | <link>`');
+                return;
+            }
+
+            const eventDetailsStr = parts[0];
+            const dateStr = parts[1];
+            const eventLink = parts[2] || '';
+
+            // Parse role mentions and event name
+            const roleMentions = eventDetailsStr.match(/<@&(\d+)>/g) || [];
+            if (roleMentions.length === 0) {
+                await message.reply('❌ **Missing role mentions.** You must mention at least one region role.\n\n**Format:** `@RegionRole @LocationRole "Event Name"`\n**Example:** `@London @CentralLondon "Community Meeting"`');
+                return;
+            }
+
+            // Extract event name (everything after the last role mention)
+            const nameMatch = eventDetailsStr.match(/.*>[\s]*(.+)$/);
+            if (!nameMatch) {
+                await message.reply('❌ **Missing event name.** Add the event name after the role mentions.\n\n**Example:** `@London @CentralLondon "Community Meeting"`');
+                return;
+            }
+
+            const eventName = nameMatch[1].replace(/^["']|["']$/g, '').trim();
+            if (!eventName) {
+                await message.reply('❌ **Event name cannot be empty.**');
+                return;
+            }
+
+            // Validate and resolve roles
+            const guild = message.guild;
+            const mentionedRoles = roleMentions.map(mention => {
+                const roleId = mention.match(/<@&(\d+)>/)[1];
+                return guild.roles.cache.get(roleId);
+            }).filter(role => role !== undefined);
+
+            if (mentionedRoles.length !== roleMentions.length) {
+                await message.reply('❌ **Some mentioned roles do not exist in this server.** Please use valid role mentions.');
+                return;
+            }
+
+            // Determine region and location from roles
+            // First role is treated as region, second (if exists) as location
+            const regionRole = mentionedRoles[0];
+            const locationRole = mentionedRoles.length > 1 ? mentionedRoles[1] : null;
+
+            // Validate date format
+            const dateRegex = /^\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}$/;
+            if (!dateRegex.test(dateStr)) {
+                await message.reply('❌ **Invalid date format.** Use: `YYYY-MM-DD HH:MM`\n\n**Example:** `2024-08-25 18:00`');
+                return;
+            }
+
+            // Validate link if provided
+            if (eventLink && !this.isValidUrl(eventLink)) {
+                await message.reply('❌ **Invalid link format.** Please provide a valid URL starting with http:// or https://\n\n**Example:** `https://facebook.com/events/123456`');
+                return;
+            }
+
+            // Create event object
+            const eventData = {
+                name: eventName,
+                region: regionRole.name,
+                location: locationRole ? locationRole.name : null,
+                eventDate: dateStr.trim(),
+                link: eventLink || null
+            };
+
+            // Create event using EventManager with role objects
+            const eventManager = this.bot.getEventManager();
+            const event = await eventManager.createEvent(message.guild.id, eventData, message.author, regionRole, locationRole);
+
+            await message.reply(`✅ **Event created successfully!**\n\n**${event.name}**\n📅 **Date:** ${dateStr}\n📍 **Region:** ${regionRole} ${locationRole ? `\n🏘️ **Location:** ${locationRole}` : ''}${event.link ? `\n🔗 **Link:** <${event.link}>` : ''}\n\n🎉 Notifications have been sent to the appropriate channels!`);
+
+        } catch (error) {
+            console.error('Error handling add event command:', error);
+            
+            // Provide specific error messages for common issues
+            if (error.message.includes('Region role')) {
+                await message.reply(`❌ **Region validation error:** ${error.message}`);
+            } else if (error.message.includes('Location role')) {
+                await message.reply(`❌ **Location validation error:** ${error.message}`);
+            } else if (error.message.includes('date')) {
+                await message.reply('❌ **Date error.** Make sure the date is in the future and uses format `YYYY-MM-DD HH:MM`');
+            } else {
+                await message.reply('❌ An error occurred while creating the event. Please check the command format and try again.');
+            }
+        }
+    }
+
+    async handleRemoveEvent(message, eventIdArg) {
+        try {
+            const eventId = eventIdArg.trim();
+            
+            if (!eventId) {
+                await message.reply('❌ **Missing event ID.**\n\n**Format:** `!removeevent <event_id>`\n\n**Example:** `!removeevent abc123-def456-ghi789`\n\n💡 **Tip:** Use `!events` in regional channels to find event IDs, or check bot logs when creating events.');
+                return;
+            }
+
+            // Get event details before deleting for confirmation message
+            const guildId = this.bot.getGuildId();
+            const event = await this.bot.getEventManager().storage.getEvent(guildId, eventId);
+            
+            if (!event) {
+                await message.reply(`❌ **Event not found.** No event exists with ID \`${eventId}\`.\n\n💡 **Tip:** Double-check the event ID. Use \`!events\` in regional channels to see current events and their IDs.`);
+                return;
+            }
+
+            // Delete the event
+            await this.bot.getEventManager().storage.deleteEvent(guildId, eventId);
+
+            // Send confirmation
+            const eventDate = new Date(event.event_date);
+            const formattedDate = eventDate.toLocaleDateString('en-GB', {
+                weekday: 'long',
+                year: 'numeric', 
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            await message.reply(`✅ **Event removed successfully**
+
+**Removed Event:**
+📅 **${event.name}**
+🌍 Region: ${event.region}
+${event.location ? `📍 Location: ${event.location}\n` : ''}⏰ Date: ${formattedDate}
+🆔 ID: \`${eventId}\`
+
+The event has been permanently deleted and will no longer appear in event listings or send reminders.`);
+
+            console.log(`🗑️ Event removed by ${message.author.tag}: ${event.name} (${eventId})`);
+
+        } catch (error) {
+            console.error('Error handling remove event command:', error);
+            await message.reply('❌ An error occurred while removing the event. Please check the event ID and try again.');
+        }
+    }
+
+    // Helper method to validate URLs
+    isValidUrl(string) {
+        try {
+            const url = new URL(string);
+            return url.protocol === 'http:' || url.protocol === 'https:';
+        } catch (_) {
+            return false;
+        }
     }
 
     async handleMemberHelp(message) {
@@ -390,6 +561,9 @@ ${proposalInfo}
 \`!proposals\` - View pending proposals needing support
 \`!activevotes\` - View currently active votes  
 \`!voteinfo <vote_message_id>\` - Get detailed info about a specific vote
+
+**Event Information:**
+\`!events\` - View upcoming events (only works in regional/local channels)
 
 **Community Information:**
 \`!moderators\` - View current server moderators

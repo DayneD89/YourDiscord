@@ -6,6 +6,7 @@ const EventHandlers = require('./EventHandlers');
 const CommandHandler = require('./CommandHandler');
 const UserValidator = require('./UserValidator');
 const ProposalManager = require('./ProposalManager');
+const EventManager = require('./EventManager');
 
 // Main bot coordinator class - orchestrates all bot components
 // Handles Discord client setup, configuration loading, and module initialization
@@ -34,6 +35,9 @@ class DiscordReactionBot {
         this.commandChannelId = null;
         this.memberCommandChannelId = null;
         
+        // Flag to prevent duplicate shutdown messages
+        this.shutdownMessageSent = false;
+        
         // Initialize specialized modules - each handles a specific bot responsibility
         // This separation keeps concerns isolated and makes the code more maintainable
         this.configManager = new ConfigManager();        // S3-backed reaction configuration
@@ -41,6 +45,7 @@ class DiscordReactionBot {
         this.proposalManager = new ProposalManager(this); // Community governance system
         this.eventHandlers = new EventHandlers(this);    // Discord event processing
         this.commandHandler = new CommandHandler(this);   // Bot command execution
+        this.eventManager = null;                         // Event system (initialized later with config)
         
         this.setupEventHandlers();
     }
@@ -56,12 +61,14 @@ class DiscordReactionBot {
             // These IDs are unique to each Discord server and deployment
             this.guildId = runtimeConfig.guildId;
             this.botToken = runtimeConfig.botToken;
+            this.runId = runtimeConfig.runId || 'unknown';
             this.moderatorRoleId = runtimeConfig.moderatorRoleId;
             this.memberRoleId = runtimeConfig.memberRoleId;
             this.commandChannelId = runtimeConfig.commandChannelId;
             this.memberCommandChannelId = runtimeConfig.memberCommandChannelId;
 
             console.log(`Guild ID: ${this.guildId}`);
+            console.log(`Bot Run ID: ${this.runId}`);
             console.log(`Moderator Command Channel ID: ${this.commandChannelId}`);
             console.log(`Member Command Channel ID: ${this.memberCommandChannelId}`);
             console.log(`Proposal config loaded with types:`, Object.keys(runtimeConfig.proposalConfig || {}));
@@ -77,6 +84,18 @@ class DiscordReactionBot {
                 this.guildId,
                 runtimeConfig.proposalConfig
             );
+
+            // Initialize event management system with DynamoDB storage
+            // This enables community event planning and notification features
+            this.eventsTable = runtimeConfig.eventsTable;
+            this.reminderIntervals = runtimeConfig.reminderIntervals;
+            if (!this.reminderIntervals) {
+                console.error('❌ Reminder intervals not configured in runtime config');
+                process.exit(1);
+            }
+            this.eventManager = new EventManager(this);
+            console.log(`Event management system initialized with table: ${runtimeConfig.eventsTable}`);
+            console.log(`Reminder intervals: ${this.reminderIntervals.weekReminder/60000}min, ${this.reminderIntervals.dayReminder/60000}min`);
 
             // Connect to Discord and start processing events
             // Bot becomes active and responsive after this point
@@ -187,19 +206,17 @@ class DiscordReactionBot {
                 process.exit(0);
             });
 
-            // Custom early shutdown handler for ALB draining detection
-            process.on('earlyShutdown', async () => {
-                console.log('Detected early shutdown (ALB draining), sending message...');
-                await this.postShutdownMessage('Instance draining (ALB health check)');
+            // Consolidated ALB draining detection - all paths lead to this handler
+            const handleDraining = async (source) => {
+                console.log(`🔄 ALB draining detected from ${source}, sending shutdown message...`);
+                await this.postShutdownMessage('Instance draining (ALB health checks stopped)');
                 // Don't destroy client yet, just send the message
-            });
+            };
 
-            // Handle USR1 signal from health check process for draining detection
-            process.on('SIGUSR1', async () => {
-                console.log('Received USR1 signal (ALB draining detected), sending shutdown message...');
-                await this.postShutdownMessage('Instance draining (ALB stopped health checks)');
-                // Don't destroy client yet, just send the message
-            });
+            // Multiple ways the draining can be detected, but one handler
+            process.on('earlyShutdown', () => handleDraining('earlyShutdown'));
+            process.on('SIGUSR1', () => handleDraining('SIGUSR1'));
+            process.on('albDraining', () => handleDraining('albDraining'));
         }
     }
 
@@ -207,6 +224,7 @@ class DiscordReactionBot {
     // These provide a clean interface for other modules to access bot state
     // without exposing the internal structure or allowing direct modification
     getGuildId() { return this.guildId; }
+    getRunId() { return this.runId; }
     getModeratorRoleId() { return this.moderatorRoleId; }
     getMemberRoleId() { return this.memberRoleId; }
     getCommandChannelId() { return this.commandChannelId; }
@@ -215,6 +233,9 @@ class DiscordReactionBot {
     getConfigManager() { return this.configManager; }
     getProposalManager() { return this.proposalManager; }
     getUserValidator() { return this.userValidator; }
+    getEventManager() { return this.eventManager; }
+    getEventsTable() { return this.eventsTable; }
+    getReminderIntervals() { return this.reminderIntervals; }
 
     // Pre-cache messages that we're monitoring for reactions
     // Discord requires messages to be in cache before reaction events will fire properly
@@ -331,7 +352,8 @@ class DiscordReactionBot {
             console.log(`✅ Bot has SendMessages permission in ${modBotChannel.name}`);
 
             const timestamp = new Date().toISOString();
-            const confirmationMessage = `🤖 **Bot Online** - New version deployed and ready (${timestamp})`;
+            const startupTime = Math.round(process.uptime());
+            const confirmationMessage = `🤖 **Bot ${this.runId} Online** - New version deployed and ready\n⏰ ${timestamp}\n⚡ Startup: ${startupTime}s`;
 
             await modBotChannel.send(confirmationMessage);
             console.log(`✅ Posted deployment confirmation to ${modBotChannel.name} channel`);
@@ -345,6 +367,14 @@ class DiscordReactionBot {
     // Post a brief shutdown message to moderator bot channel before terminating
     // Provides visibility when instances are being replaced during deployments
     async postShutdownMessage(reason) {
+        // Prevent duplicate shutdown messages
+        if (this.shutdownMessageSent) {
+            console.log(`🔄 Shutdown message already sent, skipping duplicate for: ${reason}`);
+            return;
+        }
+        
+        console.log(`🔄 Sending shutdown message for: ${reason}`);
+        
         try {
             // Set a timeout to ensure we don't block shutdown too long
             const timeoutPromise = new Promise((_, reject) => 
@@ -355,6 +385,9 @@ class DiscordReactionBot {
             
             // Race between sending message and timeout
             await Promise.race([messagePromise, timeoutPromise]);
+            
+            // Only set flag after successful send
+            this.shutdownMessageSent = true;
             
         } catch (error) {
             console.error('Error posting shutdown message:', error);
@@ -376,8 +409,10 @@ class DiscordReactionBot {
         }
 
         const timestamp = new Date().toISOString();
-        const shutdownMessage = `🔄 **Bot Shutting Down** - ${reason} (${timestamp})`;
+        const uptime = Math.round(process.uptime());
+        const shutdownMessage = `🔄 **Bot ${this.runId} Shutting Down** - ${reason}\n⏰ ${timestamp}\n⚡ Uptime: ${uptime}s`;
 
+        console.log(`🔄 Attempting to send shutdown message: ${shutdownMessage.replace(/\n/g, ' | ')}`);
         await modBotChannel.send(shutdownMessage);
         console.log(`✅ Posted shutdown message to moderator bot channel`);
     }

@@ -7,9 +7,9 @@ Requires=discord-health.service
 Type=simple
 User=ec2-user
 WorkingDirectory=/opt/discord-bot
-ExecStart=/bin/bash -lc "/usr/bin/node bot-enhanced.js 2>&1 | /usr/bin/tee -a /var/log/discord-bot/bot.log"
+ExecStart=/usr/bin/node bot-enhanced.js
 Restart=always
-RestartSec=10
+RestartSec=5
 Environment=NODE_ENV=production
 Environment=AWS_REGION=us-west-2
 StandardOutput=journal

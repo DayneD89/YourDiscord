@@ -737,4 +737,446 @@ describe('ProposalManager', () => {
       checkEndedVotesSpy.mockRestore();
     });
   });
+
+  describe('checkEndedVotes error logging', () => {
+    beforeEach(async () => {
+      const mockConfig = {
+        policy: {
+          supportThreshold: 5,
+          voteDuration: 86400000,
+          voteChannelId: 'vote123',
+          resolutionsChannelId: 'resolutions123'
+        }
+      };
+      await proposalManager.initialize('test-dynamo-table', 'guild123', mockConfig);
+    });
+
+    it('should log errors when processing ended votes fails', async () => {
+      const mockEndedVotes = [
+        { message_id: 'msg1', proposal_type: 'policy' },
+        { message_id: 'msg2', proposal_type: 'policy' }
+      ];
+
+      mockStorage.getActiveVotes.mockReturnValue(mockEndedVotes);
+      
+      // Mock processEndedVote to fail for one vote
+      const processEndedVoteSpy = jest.spyOn(proposalManager, 'processEndedVote')
+        .mockResolvedValueOnce() // First succeeds
+        .mockRejectedValueOnce(new Error('Failed to process vote')); // Second fails
+      
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      await proposalManager.checkEndedVotes();
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Failed to process ended vote msg2:',
+        expect.any(Error)
+      );
+
+      processEndedVoteSpy.mockRestore();
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('processEndedVote moderator processing', () => {
+    beforeEach(async () => {
+      const mockConfig = {
+        moderator: {
+          supportThreshold: 3,
+          voteDuration: 86400000,
+          voteChannelId: 'vote123',
+          resolutionsChannelId: 'resolutions123'
+        }
+      };
+      await proposalManager.initialize('test-dynamo-table', 'guild123', mockConfig);
+
+      // Setup moderator processor mock
+      proposalManager.moderatorProcessor = {
+        processModeratorAction: jest.fn()
+      };
+    });
+
+    it('should process moderator action when proposal passes', async () => {
+      const mockProposal = {
+        message_id: 'msg123',
+        proposal_type: 'moderator',
+        is_withdrawal: false,
+        vote_channel_id: 'vote123',
+        yes_votes: 5,
+        no_votes: 2
+      };
+
+      const mockUpdatedProposal = {
+        ...mockProposal,
+        final_yes: 5,
+        final_no: 2
+      };
+
+      mockStorage.getProposal.mockResolvedValue(mockUpdatedProposal);
+      mockStorage.updateProposal.mockResolvedValue();
+      
+      const updateVoteCountsSpy = jest.spyOn(proposalManager, 'updateVoteCounts').mockResolvedValue();
+      proposalManager.moderatorProcessor.processModeratorAction.mockResolvedValue(true);
+      
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      await proposalManager.processEndedVote('msg123', mockProposal);
+
+      expect(proposalManager.moderatorProcessor.processModeratorAction).toHaveBeenCalledWith(mockUpdatedProposal, mockGuild);
+      expect(consoleSpy).toHaveBeenCalledWith('✅ Moderator action processed successfully for msg123');
+
+      updateVoteCountsSpy.mockRestore();
+      consoleSpy.mockRestore();
+    });
+
+    it('should log error when moderator processing fails', async () => {
+      const mockProposal = {
+        message_id: 'msg123',
+        proposal_type: 'moderator',
+        is_withdrawal: false,
+        vote_channel_id: 'vote123',
+        yes_votes: 5,
+        no_votes: 2
+      };
+
+      const mockUpdatedProposal = {
+        ...mockProposal,
+        final_yes: 5,
+        final_no: 2
+      };
+
+      mockStorage.getProposal.mockResolvedValue(mockUpdatedProposal);
+      mockStorage.updateProposal.mockResolvedValue();
+      
+      const updateVoteCountsSpy = jest.spyOn(proposalManager, 'updateVoteCounts').mockResolvedValue();
+      proposalManager.moderatorProcessor.processModeratorAction.mockResolvedValue(false);
+      
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      await proposalManager.processEndedVote('msg123', mockProposal);
+
+      expect(consoleSpy).toHaveBeenCalledWith('❌ Failed to process moderator action for msg123');
+
+      updateVoteCountsSpy.mockRestore();
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('getPendingProposals', () => {
+    beforeEach(async () => {
+      const mockConfig = {
+        policy: {
+          supportThreshold: 5,
+          voteDuration: 86400000,
+          debateChannelId: 'debate123',
+          voteChannelId: 'vote123'
+        },
+        governance: {
+          supportThreshold: 3,
+          voteDuration: 86400000,
+          debateChannelId: 'debate456',
+          voteChannelId: 'vote456'
+        }
+      };
+      await proposalManager.initialize('test-dynamo-table', 'guild123', mockConfig);
+    });
+
+    it('should find pending proposals with support reactions', async () => {
+      // Mock debate channels
+      const mockDebateChannel1 = {
+        id: 'debate123',
+        messages: {
+          fetch: jest.fn().mockResolvedValue(new Map([
+            ['msg1', {
+              id: 'msg1',
+              content: '**Policy**: Test proposal 1',
+              author: { id: 'user1', tag: 'user1#1234' },
+              createdAt: new Date('2025-01-01'),
+              reactions: {
+                cache: new Map([
+                  ['✅', { count: 3, me: false }]
+                ])
+              }
+            }],
+            ['msg2', {
+              id: 'msg2',
+              content: '**Policy**: Test proposal 2',
+              author: { id: 'user2', tag: 'user2#1234' },
+              createdAt: new Date('2025-01-02'),
+              reactions: {
+                cache: new Map([
+                  ['✅', { count: 2, me: false }]
+                ])
+              }
+            }]
+          ]))
+        }
+      };
+
+      const mockDebateChannel2 = {
+        id: 'debate456',
+        messages: {
+          fetch: jest.fn().mockResolvedValue(new Map())
+        }
+      };
+
+      mockGuild.channels.cache.get
+        .mockReturnValueOnce(mockDebateChannel1)
+        .mockReturnValueOnce(mockDebateChannel2);
+
+      // Mock parser to recognize valid proposals
+      mockParser.getProposalType
+        .mockReturnValueOnce({
+          type: 'policy',
+          isWithdrawal: false,
+          config: { supportThreshold: 5 }
+        })
+        .mockReturnValueOnce({
+          type: 'policy',
+          isWithdrawal: false,
+          config: { supportThreshold: 5 }
+        });
+
+      // Mock storage to return null (no existing proposals)
+      mockStorage.getProposal.mockResolvedValue(null);
+
+      const result = await proposalManager.getPendingProposals();
+
+      expect(result).toHaveLength(2);
+      expect(result[0].messageId).toBe('msg1');
+      expect(result[0].supportCount).toBe(3);
+      expect(result[0].requiredSupport).toBe(5);
+      expect(result[1].messageId).toBe('msg2');
+      expect(result[1].supportCount).toBe(2);
+      
+      // Should be sorted by support count (descending)
+      expect(result[0].supportCount).toBeGreaterThan(result[1].supportCount);
+    });
+
+    it('should skip messages already tracked in DynamoDB', async () => {
+      const mockDebateChannel = {
+        id: 'debate123',
+        messages: {
+          fetch: jest.fn().mockResolvedValue(new Map([
+            ['msg1', {
+              id: 'msg1',
+              content: '**Policy**: Already tracked proposal',
+              author: { id: 'user1', tag: 'user1#1234' },
+              createdAt: new Date('2025-01-01'),
+              reactions: {
+                cache: new Map([
+                  ['✅', { count: 3, me: false }]
+                ])
+              }
+            }]
+          ]))
+        }
+      };
+
+      mockGuild.channels.cache.get.mockReturnValue(mockDebateChannel);
+      
+      // Mock storage to return existing proposal
+      mockStorage.getProposal.mockResolvedValue({ message_id: 'msg1', status: 'voting' });
+
+      const result = await proposalManager.getPendingProposals();
+
+      expect(result).toHaveLength(0);
+    });
+
+    it('should skip messages without valid proposal format', async () => {
+      const mockDebateChannel = {
+        id: 'debate123',
+        messages: {
+          fetch: jest.fn().mockResolvedValue(new Map([
+            ['msg1', {
+              id: 'msg1',
+              content: 'This is not a valid proposal format',
+              author: { id: 'user1', tag: 'user1#1234' },
+              createdAt: new Date('2025-01-01'),
+              reactions: {
+                cache: new Map([
+                  ['✅', { count: 3, me: false }]
+                ])
+              }
+            }]
+          ]))
+        }
+      };
+
+      mockGuild.channels.cache.get.mockReturnValue(mockDebateChannel);
+      mockStorage.getProposal.mockResolvedValue(null);
+      
+      // Mock parser to not recognize the format
+      mockParser.getProposalType.mockReturnValue(null);
+
+      const result = await proposalManager.getPendingProposals();
+
+      expect(result).toHaveLength(0);
+    });
+
+    it('should skip messages without support reactions', async () => {
+      const mockDebateChannel = {
+        id: 'debate123',
+        messages: {
+          fetch: jest.fn().mockResolvedValue(new Map([
+            ['msg1', {
+              id: 'msg1',
+              content: '**Policy**: No reactions',
+              author: { id: 'user1', tag: 'user1#1234' },
+              createdAt: new Date('2025-01-01'),
+              reactions: {
+                cache: new Map() // No reactions
+              }
+            }]
+          ]))
+        }
+      };
+
+      mockGuild.channels.cache.get.mockReturnValue(mockDebateChannel);
+      mockStorage.getProposal.mockResolvedValue(null);
+      mockParser.getProposalType.mockReturnValue({
+        type: 'policy',
+        isWithdrawal: false,
+        config: { supportThreshold: 5 }
+      });
+
+      const result = await proposalManager.getPendingProposals();
+
+      expect(result).toHaveLength(0);
+    });
+
+    it('should skip messages that have reached support threshold', async () => {
+      const mockDebateChannel = {
+        id: 'debate123',
+        messages: {
+          fetch: jest.fn().mockResolvedValue(new Map([
+            ['msg1', {
+              id: 'msg1',
+              content: '**Policy**: Full support',
+              author: { id: 'user1', tag: 'user1#1234' },
+              createdAt: new Date('2025-01-01'),
+              reactions: {
+                cache: new Map([
+                  ['✅', { count: 5, me: false }] // Meets threshold
+                ])
+              }
+            }]
+          ]))
+        }
+      };
+
+      mockGuild.channels.cache.get.mockReturnValue(mockDebateChannel);
+      mockStorage.getProposal.mockResolvedValue(null);
+      mockParser.getProposalType.mockReturnValue({
+        type: 'policy',
+        isWithdrawal: false,
+        config: { supportThreshold: 5 }
+      });
+
+      const result = await proposalManager.getPendingProposals();
+
+      expect(result).toHaveLength(0);
+    });
+
+    it('should handle missing debate channels', async () => {
+      mockGuild.channels.cache.get.mockReturnValue(null);
+      
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      const result = await proposalManager.getPendingProposals();
+
+      expect(result).toHaveLength(0);
+      expect(consoleSpy).toHaveBeenCalledWith('Debate channel debate123 not found for policy');
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle errors when fetching channel messages', async () => {
+      const mockDebateChannel = {
+        id: 'debate123',
+        messages: {
+          fetch: jest.fn().mockRejectedValue(new Error('Failed to fetch messages'))
+        }
+      };
+
+      mockGuild.channels.cache.get.mockReturnValue(mockDebateChannel);
+      
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      const result = await proposalManager.getPendingProposals();
+
+      expect(result).toHaveLength(0);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Error scanning channel debate123 for pending proposals:',
+        expect.any(Error)
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle guild not found', async () => {
+      mockBot.client.guilds.cache.get.mockReturnValue(null);
+      
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      const result = await proposalManager.getPendingProposals();
+
+      expect(result).toEqual([]);
+      expect(consoleSpy).toHaveBeenCalledWith('Guild not found for pending proposals search');
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle general errors gracefully', async () => {
+      // Force an error by making bot.client throw
+      Object.defineProperty(mockBot, 'client', {
+        get: jest.fn(() => {
+          throw new Error('Client error');
+        })
+      });
+      
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      const result = await proposalManager.getPendingProposals();
+
+      expect(result).toEqual([]);
+      expect(consoleSpy).toHaveBeenCalledWith('Error getting pending proposals:', expect.any(Error));
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should exclude bot reactions from support count', async () => {
+      const mockDebateChannel = {
+        id: 'debate123',
+        messages: {
+          fetch: jest.fn().mockResolvedValue(new Map([
+            ['msg1', {
+              id: 'msg1',
+              content: '**Policy**: Bot reaction test',
+              author: { id: 'user1', tag: 'user1#1234' },
+              createdAt: new Date('2025-01-01'),
+              reactions: {
+                cache: new Map([
+                  ['✅', { count: 4, me: true }] // Bot reacted, so actual support is 3
+                ])
+              }
+            }]
+          ]))
+        }
+      };
+
+      mockGuild.channels.cache.get.mockReturnValue(mockDebateChannel);
+      mockStorage.getProposal.mockResolvedValue(null);
+      mockParser.getProposalType.mockReturnValue({
+        type: 'policy',
+        isWithdrawal: false,
+        config: { supportThreshold: 5 }
+      });
+
+      const result = await proposalManager.getPendingProposals();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].supportCount).toBe(3); // 4 - 1 (bot)
+    });
+  });
 });

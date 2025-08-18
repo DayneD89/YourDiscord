@@ -126,4 +126,15 @@ locals {
 
   # Environment-specific private subnet CIDR blocks to avoid conflicts
   private_subnet_cidr = var.env == "main" ? "172.31.240.0/24" : "172.31.245.0/24"
+  
+  # Environment-specific event reminder intervals
+  # Production: 7 days and 24 hours before events
+  # Development: 2 minutes and 1 minute after event creation (for fast testing)
+  reminder_intervals = var.env == "main" ? {
+    weekReminder = 7 * 24 * 60 * 60 * 1000    # 7 days in milliseconds
+    dayReminder = 24 * 60 * 60 * 1000          # 24 hours in milliseconds
+  } : {
+    weekReminder = -2 * 60 * 1000              # 2 minutes after creation (negative = after)
+    dayReminder = -1 * 60 * 1000               # 1 minute after creation (negative = after)
+  }
 }

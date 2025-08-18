@@ -55,6 +55,13 @@ class MockBot {
   getConfigManager() { return this.configManager; }
   getUserValidator() { return this.userValidator; }
   getProposalManager() { return this.proposalManager; }
+  getReminderIntervals() { 
+    return {
+      weekReminder: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
+      dayReminder: 24 * 60 * 60 * 1000 // 24 hours in ms
+    };
+  }
+  getEventsTable() { return 'discord-events-test'; }
 }
 
 module.exports = MockBot;

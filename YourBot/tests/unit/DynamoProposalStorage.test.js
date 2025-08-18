@@ -396,4 +396,149 @@ describe('DynamoProposalStorage AWS SDK v3 Migration', () => {
       expect(result).toEqual([]);
     });
   });
+
+  describe('getExpiringVotes', () => {
+    beforeEach(async () => {
+      mockDynamoDBClientSend.mockResolvedValue({ Table: { TableName: mockTableName } });
+      await storage.initialize(mockTableName, mockGuildId);
+    });
+
+    it('should retrieve expiring votes before specified time', async () => {
+      const beforeTime = '2025-08-18T12:00:00Z';
+      const mockExpiringVotes = [
+        { 
+          guild_id: mockGuildId, 
+          message_id: 'msg1', 
+          status: 'voting',
+          end_time: '2025-08-18T11:30:00Z'
+        },
+        { 
+          guild_id: mockGuildId, 
+          message_id: 'msg2', 
+          status: 'voting',
+          end_time: '2025-08-18T11:45:00Z'
+        }
+      ];
+      
+      mockSend.mockResolvedValue({ Items: mockExpiringVotes });
+
+      const result = await storage.getExpiringVotes(beforeTime);
+
+      expect(result).toEqual(mockExpiringVotes);
+      expect(mockSend).toHaveBeenCalled();
+      expect(QueryCommand).toHaveBeenCalledWith({
+        TableName: mockTableName,
+        IndexName: 'end-time-index',
+        KeyConditionExpression: 'guild_id = :guildId AND end_time <= :endTime',
+        FilterExpression: '#status = :status',
+        ExpressionAttributeNames: {
+          '#status': 'status'
+        },
+        ExpressionAttributeValues: {
+          ':guildId': mockGuildId,
+          ':endTime': beforeTime,
+          ':status': 'voting'
+        }
+      });
+    });
+
+    it('should return empty array on getExpiringVotes error', async () => {
+      const beforeTime = '2025-08-18T12:00:00Z';
+      mockSend.mockRejectedValue(new Error('Query failed'));
+
+      const result = await storage.getExpiringVotes(beforeTime);
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('getProposalStats', () => {
+    beforeEach(async () => {
+      mockDynamoDBClientSend.mockResolvedValue({ Table: { TableName: mockTableName } });
+      await storage.initialize(mockTableName, mockGuildId);
+    });
+
+    it('should calculate and return proposal statistics', async () => {
+      const mockAllProposals = [
+        { 
+          guild_id: mockGuildId, 
+          message_id: 'msg1', 
+          status: 'voting',
+          proposal_type: 'policy'
+        },
+        { 
+          guild_id: mockGuildId, 
+          message_id: 'msg2', 
+          status: 'passed',
+          proposal_type: 'policy'
+        },
+        { 
+          guild_id: mockGuildId, 
+          message_id: 'msg3', 
+          status: 'failed',
+          proposal_type: 'governance'
+        },
+        { 
+          guild_id: mockGuildId, 
+          message_id: 'msg4', 
+          status: 'voting',
+          proposal_type: 'governance'
+        }
+      ];
+      
+      mockSend.mockResolvedValue({ Items: mockAllProposals });
+
+      const result = await storage.getProposalStats();
+
+      expect(result).toEqual({
+        total: 4,
+        active: 2,
+        passed: 1,
+        failed: 1,
+        byType: {
+          policy: 2,
+          governance: 2
+        }
+      });
+    });
+
+    it('should handle proposals with no type', async () => {
+      const mockAllProposals = [
+        { 
+          guild_id: mockGuildId, 
+          message_id: 'msg1', 
+          status: 'voting'
+          // No proposal_type field
+        }
+      ];
+      
+      mockSend.mockResolvedValue({ Items: mockAllProposals });
+
+      const result = await storage.getProposalStats();
+
+      expect(result).toEqual({
+        total: 1,
+        active: 1,
+        passed: 0,
+        failed: 0,
+        byType: {
+          unknown: 1
+        }
+      });
+    });
+
+    it('should return default stats on error', async () => {
+      mockSend.mockRejectedValue(new Error('Query failed'));
+
+      const result = await storage.getProposalStats();
+
+      expect(result).toEqual({
+        total: 0,
+        active: 0,
+        passed: 0,
+        failed: 0,
+        byType: {}
+      });
+    });
+  });
 });

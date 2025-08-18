@@ -28,12 +28,16 @@ class EventHandlers {
             return;
         }
 
-        // Process reactions through both systems simultaneously for comprehensive handling
-        // Legacy reaction role system for configured messages + new proposal system
-        await Promise.all([
-            this.handleReaction(reaction, user, type),
-            this.handleProposalReaction(reaction, user, type)
-        ]);
+        try {
+            // Process reactions through both systems simultaneously for comprehensive handling
+            // Legacy reaction role system for configured messages + new proposal system
+            await Promise.all([
+                this.handleReaction(reaction, user, type),
+                this.handleProposalReaction(reaction, user, type)
+            ]);
+        } catch (error) {
+            console.error('Error processing reaction:', error);
+        }
     }
 
     // Handle reactions specifically for the proposal/voting system
@@ -198,18 +202,154 @@ class EventHandlers {
             return;
         }
 
-        // Restrict command processing to designated command channels
-        // This keeps bot interactions organized and prevents spam in other channels
+        // Restrict command processing to designated command channels or regional/local channels for !events
         const isModeratorChannel = message.channel.id === this.bot.getCommandChannelId();
         const isMemberChannel = message.channel.id === this.bot.getMemberCommandChannelId();
+        const isEventsCommand = message.content.startsWith('!events');
+        const isRegionalOrLocalChannel = this.isRegionalOrLocalChannel(message.channel.name);
         
-        if (!isModeratorChannel && !isMemberChannel) {
-            console.log(`Message not in command channels (mod: ${this.bot.getCommandChannelId()}, member: ${this.bot.getMemberCommandChannelId()}), ignoring`);
+        if (!isModeratorChannel && !isMemberChannel && !(isEventsCommand && isRegionalOrLocalChannel)) {
+            console.log(`Message not in authorized channels for this command, ignoring`);
+            return;
+        }
+
+        // Handle !events command in regional/local channels specially
+        if (isEventsCommand && isRegionalOrLocalChannel) {
+            console.log(`Processing !events command from ${message.author.tag} in ${message.channel.name}`);
+            await this.handleEventsCommand(message);
             return;
         }
 
         console.log(`Processing command from ${message.author.tag}: "${message.content}" in ${isModeratorChannel ? 'moderator' : 'member'} channel`);
         await this.bot.commandHandler.handleCommand(message, isModeratorChannel);
+    }
+
+    /**
+     * Check if a channel name follows regional or local naming pattern
+     */
+    isRegionalOrLocalChannel(channelName) {
+        if (!channelName || typeof channelName !== 'string') {
+            return false;
+        }
+        return channelName.startsWith('regional-') || channelName.startsWith('local-');
+    }
+
+    /**
+     * Handle !events command in regional/local channels
+     */
+    async handleEventsCommand(message) {
+        try {
+            // Check if user has member role
+            const guild = message.guild;
+            const member = guild.members.cache.get(message.author.id);
+            
+            if (!member) {
+                await message.reply('❌ Could not find your membership in this server.');
+                return;
+            }
+
+            const isMember = this.bot.getUserValidator().hasRole(member, this.bot.getMemberRoleId());
+            if (!isMember) {
+                await message.reply('❌ You need the member role to use this command.');
+                return;
+            }
+
+            // Check if user is a moderator for enhanced display
+            const isModerator = this.bot.getUserValidator().canUseModerator(member, this.bot.getModeratorRoleId());
+
+            const channelName = message.channel.name;
+            let events = [];
+            let areaName = '';
+            let areaType = '';
+
+            if (channelName.startsWith('regional-')) {
+                // Extract region name from channel name: regional-north-east -> North East
+                areaName = channelName.substring(9).replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                areaType = 'regional';
+                events = await this.bot.getEventManager().getUpcomingEventsByRegion(guild.id, areaName);
+            } else if (channelName.startsWith('local-')) {
+                // Extract location name from channel name: local-blyth-ashington-morpeth -> Blyth/Ashington/Morpeth  
+                areaName = channelName.substring(6).replace(/-/g, '/').replace(/\b\w/g, l => l.toUpperCase());
+                areaType = 'local';
+                events = await this.bot.getEventManager().getUpcomingEventsByLocation(guild.id, areaName);
+            }
+
+            console.log(`🔍 Found ${events.length} upcoming events for ${areaType} area: ${areaName}`);
+
+            if (events.length === 0) {
+                await message.reply(`📅 **No upcoming events found for ${areaName}**\n\nCheck back later or suggest new events with \`!addevent\` in a moderator channel!`);
+                return;
+            }
+
+            // Format events list
+            let eventsDisplay = `📅 **Upcoming Events in ${areaName}** (Next ${events.length}):\n\n`;
+            
+            events.forEach((event, index) => {
+                const eventDate = new Date(event.event_date);
+                const formattedDate = eventDate.toLocaleDateString('en-GB', {
+                    weekday: 'short',
+                    month: 'short', 
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+
+                const timeUntil = this.getTimeUntilEvent(eventDate);
+                
+                eventsDisplay += `**${index + 1}.** 🎉 **${event.name}**\n`;
+                eventsDisplay += `   📅 ${formattedDate} (${timeUntil})\n`;
+                eventsDisplay += `   📍 ${event.region}${event.location ? ` → ${event.location}` : ''}\n`;
+                if (event.link) {
+                    eventsDisplay += `   🔗 <${event.link}>\n`;
+                }
+                eventsDisplay += `   👤 <@${event.created_by}>\n`;
+                
+                // Show event ID to moderators only
+                if (isModerator) {
+                    eventsDisplay += `   🆔 \`${event.event_id}\`\n`;
+                }
+                eventsDisplay += `\n`;
+            });
+
+            eventsDisplay += `💡 **Want to add an event?** Ask a moderator to use \`!addevent\` in their bot channel!`;
+
+            await message.reply(eventsDisplay);
+
+        } catch (error) {
+            console.error('Error handling !events command:', error);
+            await message.reply('❌ An error occurred while fetching events.');
+        }
+    }
+
+    /**
+     * Get human-readable time until/since event
+     */
+    getTimeUntilEvent(eventDate) {
+        const now = new Date();
+        const timeDiff = eventDate.getTime() - now.getTime();
+        
+        if (timeDiff <= 0) {
+            // Event has started - show how long ago
+            const timeSinceStart = Math.abs(timeDiff);
+            const hoursSince = Math.floor(timeSinceStart / (1000 * 60 * 60));
+            const minutesSince = Math.floor((timeSinceStart % (1000 * 60 * 60)) / (1000 * 60));
+            
+            if (hoursSince >= 1) {
+                return `started ${hoursSince}h ago`;
+            } else if (minutesSince >= 1) {
+                return `started ${minutesSince}m ago`;
+            } else {
+                return 'just started';
+            }
+        }
+        
+        // Event hasn't started yet
+        const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        
+        if (days > 0) return `in ${days} day${days !== 1 ? 's' : ''}`;
+        if (hours > 0) return `in ${hours} hour${hours !== 1 ? 's' : ''}`;
+        return 'very soon';
     }
 }
 

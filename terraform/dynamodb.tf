@@ -118,3 +118,90 @@ output "dynamodb_proposals_table_indexes" {
     "${aws_dynamodb_table.proposals.arn}/index/end-time-index"
   ]
 }
+
+# DynamoDB table for storing community events
+# Stores event information with regional/local targeting and reminder scheduling
+resource "aws_dynamodb_table" "events" {
+  name         = "discord-events-${var.env}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "guild_id"
+  range_key    = "event_id"
+
+  # Define the table schema
+  attribute {
+    name = "guild_id"
+    type = "S" # String - Discord guild (server) ID
+  }
+
+  attribute {
+    name = "event_id"
+    type = "S" # String - Unique event ID (UUID)
+  }
+
+  attribute {
+    name = "region"
+    type = "S" # String - Region for the event
+  }
+
+  attribute {
+    name = "event_date"
+    type = "S" # String - ISO timestamp of the event
+  }
+
+  attribute {
+    name = "reminder_status"
+    type = "S" # String - tracks which reminders have been sent
+  }
+
+  # Global Secondary Index for querying by region
+  global_secondary_index {
+    name            = "region-index"
+    hash_key        = "guild_id"
+    range_key       = "region"
+    projection_type = "ALL"
+  }
+
+  # Global Secondary Index for querying by event date (for reminders)
+  global_secondary_index {
+    name            = "date-index"
+    hash_key        = "guild_id"
+    range_key       = "event_date"
+    projection_type = "ALL"
+  }
+
+  # Global Secondary Index for reminder processing
+  global_secondary_index {
+    name            = "reminder-index"
+    hash_key        = "guild_id"
+    range_key       = "reminder_status"
+    projection_type = "ALL"
+  }
+
+  # Time To Live - remove events 30 days after they occur
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  # Point-in-time recovery for data protection
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  # Encryption at rest for security
+  server_side_encryption {
+    enabled = true
+  }
+
+  tags = {
+    Name        = "Discord Events - ${title(var.env)}"
+    Environment = var.env
+    Service     = "discord-bot"
+    Purpose     = "event-storage"
+    ManagedBy   = "terraform"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}

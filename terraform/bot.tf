@@ -51,6 +51,23 @@ data "aws_iam_policy_document" "ec2_policy" {
       "${aws_dynamodb_table.proposals.arn}/index/*"
     ]
   }
+
+  # DynamoDB permissions for events storage
+  statement {
+    actions = [
+      "dynamodb:PutItem",
+      "dynamodb:GetItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:Query",
+      "dynamodb:Scan",
+      "dynamodb:DescribeTable"
+    ]
+    resources = [
+      aws_dynamodb_table.events.arn,
+      "${aws_dynamodb_table.events.arn}/index/*"
+    ]
+  }
 }
 
 resource "aws_iam_policy" "ec2_policy" {
@@ -117,51 +134,65 @@ locals {
   config = jsonencode(local.reaction_rules)
 }
 
-locals {
-  # Enhanced user data with health checks and readiness monitoring
-  user_data_enhanced = templatefile("${path.module}/user_data_enhanced.sh.tpl", {
-    name                      = local.name
-    bot_token                 = var.discord_token
-    guild_id                  = discord_server.server.id
-    moderator_role_id         = discord_role.moderator.id
-    member_role_id            = discord_role.member.id
-    command_channel_id        = local.channels["governance_bot"]
-    member_command_channel_id = local.channels["members_bot"]
-    proposalConfig = jsonencode({
-      policy = {
-        debateChannelId      = local.channels["members_debate"]
-        voteChannelId        = local.channels["members_vote"]
-        resolutionsChannelId = local.channels["members_resolutions"]
-        supportThreshold     = var.env == "main" ? 5 : 1
-        voteDuration         = var.env == "main" ? 604800000 : 300000
-        formats              = ["Policy"]
-      }
-      governance = {
-        debateChannelId      = local.channels["governance_debate"]
-        voteChannelId        = local.channels["governance_vote"]
-        resolutionsChannelId = local.channels["governance_discussion"]
-        supportThreshold     = var.env == "main" ? 3 : 1
-        voteDuration         = var.env == "main" ? 259200000 : 300000
-        formats              = ["Governance"]
-      }
-      moderator = {
-        debateChannelId  = local.channels["governance_debate"]
-        voteChannelId    = local.channels["governance_vote"]
-        supportThreshold = var.env == "main" ? 3 : 1
-        voteDuration     = var.env == "main" ? 259200000 : 300000
-        formats          = ["Add Moderator", "Remove Moderator"]
-      }
-    })
-    s3_bucket          = aws_s3_object.bot_code.bucket
-    s3_key             = aws_s3_object.bot_code.key
-    code_hash          = data.archive_file.bot_code.output_md5
-    reactionRoleConfig = local.config
-    dynamodb_table     = aws_dynamodb_table.proposals.name
-    network_type       = var.use_private_subnet ? "private" : "public"
-  })
+# Generate a unique run ID for this deployment
+resource "random_id" "bot_run_id" {
+  byte_length = 4
+  keepers = {
+    code_hash = data.archive_file.bot_code.output_md5
+  }
+}
 
-  # Legacy user data for compatibility
-  user_data = templatefile("${path.module}/user_data.sh.tpl", {
+locals {
+  # Generate short run ID for tracking deployments
+  run_id = random_id.bot_run_id.hex
+  
+  # Enhanced user data with health checks and readiness monitoring (sensitive due to bot token)
+  user_data_enhanced = sensitive(templatefile("${path.module}/user_data_enhanced.sh.tpl", {
+    name                      = local.name
+    bot_token                 = var.discord_token
+    guild_id                  = discord_server.server.id
+    moderator_role_id         = discord_role.moderator.id
+    member_role_id            = discord_role.member.id
+    command_channel_id        = local.channels["governance_bot"]
+    member_command_channel_id = local.channels["members_bot"]
+    proposalConfig = jsonencode({
+      policy = {
+        debateChannelId      = local.channels["members_debate"]
+        voteChannelId        = local.channels["members_vote"]
+        resolutionsChannelId = local.channels["members_resolutions"]
+        supportThreshold     = var.env == "main" ? 5 : 1
+        voteDuration         = var.env == "main" ? 604800000 : 300000
+        formats              = ["Policy"]
+      }
+      governance = {
+        debateChannelId      = local.channels["governance_debate"]
+        voteChannelId        = local.channels["governance_vote"]
+        resolutionsChannelId = local.channels["governance_discussion"]
+        supportThreshold     = var.env == "main" ? 3 : 1
+        voteDuration         = var.env == "main" ? 259200000 : 300000
+        formats              = ["Governance"]
+      }
+      moderator = {
+        debateChannelId  = local.channels["governance_debate"]
+        voteChannelId    = local.channels["governance_vote"]
+        supportThreshold = var.env == "main" ? 3 : 1
+        voteDuration     = var.env == "main" ? 259200000 : 300000
+        formats          = ["Add Moderator", "Remove Moderator"]
+      }
+    })
+    s3_bucket          = aws_s3_object.bot_code.bucket
+    s3_key             = aws_s3_object.bot_code.key
+    code_hash          = data.archive_file.bot_code.output_md5
+    run_id             = local.run_id
+    reactionRoleConfig = local.config
+    dynamodb_table     = aws_dynamodb_table.proposals.name
+    events_table       = aws_dynamodb_table.events.name
+    reminderIntervals  = jsonencode(local.reminder_intervals)
+    network_type       = var.use_private_subnet ? "private" : "public"
+  }))
+
+  # Legacy user data for compatibility (sensitive due to bot token)
+  user_data = sensitive(templatefile("${path.module}/user_data.sh.tpl", {
     name                      = local.name
     bot_token                 = var.discord_token
     guild_id                  = discord_server.server.id
@@ -199,8 +230,9 @@ locals {
     code_hash          = data.archive_file.bot_code.output_md5
     reactionRoleConfig = local.config
     dynamodb_table     = aws_dynamodb_table.proposals.name
+    events_table       = aws_dynamodb_table.events.name
     network_type       = var.use_private_subnet ? "private" : "public"
-  })
+  }))
 }
 
 data "archive_file" "bot_code" {
@@ -313,8 +345,8 @@ resource "aws_lb_target_group" "bot_health" {
   health_check {
     enabled             = true
     healthy_threshold   = 2  # Consider healthy after 2 successful checks
-    unhealthy_threshold = 3  # Consider unhealthy after 3 failed checks
-    timeout             = 10 # 10 second timeout per check
+    unhealthy_threshold = 2  # Consider unhealthy after 2 failed checks (faster detection)
+    timeout             = 5  # 5 second timeout per check (faster failure detection)
     interval            = 15 # Check every 15 seconds
     path                = "/health"
     matcher             = "200"
@@ -322,8 +354,8 @@ resource "aws_lb_target_group" "bot_health" {
     port                = "3000"
   }
 
-  # Fast deregistration for quicker deployments
-  deregistration_delay = 30 # Reduced from default 300s to 30s
+  # Very fast deregistration for minimal overlap
+  deregistration_delay = 15 # Reduced from default 300s to 15s
 
   tags = {
     Name        = "${local.name}-health-tg"
@@ -348,7 +380,7 @@ resource "aws_autoscaling_group" "bot" {
   name                      = "${local.name}-asg"
   vpc_zone_identifier       = [local.selected_subnet_id]
   health_check_type         = "ELB" # Use ELB health checks for proper bot readiness detection
-  health_check_grace_period = 120   # 2 minutes for bot to start and report ready (reduced from 5 minutes)
+  health_check_grace_period = 90    # 1.5 minutes for bot to start and report ready
   target_group_arns         = [aws_lb_target_group.bot_health.arn]
 
   min_size         = 1
@@ -368,8 +400,8 @@ resource "aws_autoscaling_group" "bot" {
     strategy = "Rolling"
     preferences {
       min_healthy_percentage = 50
-      instance_warmup        = 120 # 2 minutes for bot to start and report ready
-      checkpoint_delay       = 60  # 1 minute delay before terminating old instance (reduced from 5 minutes)
+      instance_warmup        = 90  # 1.5 minutes for bot to start and report ready
+      checkpoint_delay       = 30  # 30 second delay before terminating old instance
     }
     triggers = ["tag"]
   }
@@ -422,4 +454,9 @@ output "launch_template_version" {
 output "health_check_url" {
   description = "Health check endpoint URL (internal access only)"
   value       = "http://<instance-ip>:3000/health"
+}
+
+output "bot_run_id" {
+  description = "Unique ID for this bot deployment run"
+  value       = local.run_id
 }

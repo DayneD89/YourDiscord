@@ -144,6 +144,10 @@ describe('DiscordReactionBot', () => {
           supportThreshold: 5,
           voteDuration: 86400000
         }
+      },
+      reminderIntervals: {
+        weekReminder: 7 * 24 * 60 * 60 * 1000,
+        dayReminder: 24 * 60 * 60 * 1000
       }
     };
 
@@ -494,6 +498,273 @@ describe('DiscordReactionBot', () => {
 
     it('should return user validator instance', () => {
       expect(bot.getUserValidator()).toBe(bot.userValidator);
+    });
+
+    it('should return correct run ID', () => {
+      bot.runId = 'run123';
+      expect(bot.getRunId()).toBe('run123');
+    });
+
+    it('should return event manager instance', () => {
+      bot.eventManager = { test: 'eventManager' };
+      expect(bot.getEventManager()).toBe(bot.eventManager);
+    });
+
+    it('should return events table name', () => {
+      bot.eventsTable = 'events-table-test';
+      expect(bot.getEventsTable()).toBe('events-table-test');
+    });
+
+    it('should return reminder intervals', () => {
+      bot.reminderIntervals = { weekReminder: 7, dayReminder: 1 };
+      expect(bot.getReminderIntervals()).toEqual({ weekReminder: 7, dayReminder: 1 });
+    });
+  });
+
+  describe('initialization with missing reminder intervals', () => {
+    it('should handle missing reminder intervals in config', async () => {
+      const mockRuntimeConfig = {
+        guildId: 'guild123',
+        botToken: 'bot-token-123',
+        moderatorRoleId: 'mod-role-123',
+        memberRoleId: 'member-role-123',
+        commandChannelId: 'command-channel-123',
+        memberCommandChannelId: 'member-command-channel-123',
+        dynamodbTable: 'test-dynamo-table',
+        reactionRoleConfig: [],
+        proposalConfig: {},
+        eventsTable: 'events-table'
+        // Missing reminderIntervals
+      };
+
+      fs.readFile.mockResolvedValue(JSON.stringify(mockRuntimeConfig));
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      const exitSpy = jest.spyOn(process, 'exit').mockImplementation();
+
+      await bot.initialize();
+
+      expect(consoleSpy).toHaveBeenCalledWith('❌ Reminder intervals not configured in runtime config');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+
+      consoleSpy.mockRestore();
+      exitSpy.mockRestore();
+    });
+  });
+
+  describe('postDeploymentConfirmation', () => {
+    let mockBotMember, mockPermissions;
+
+    beforeEach(() => {
+      bot.guildId = 'guild123';
+      bot.commandChannelId = 'command123';
+      bot.runId = 'test-run-123';
+      bot.client = mockClient;
+
+      mockPermissions = {
+        has: jest.fn().mockReturnValue(true),
+        toArray: jest.fn().mockReturnValue(['SendMessages'])
+      };
+
+      mockBotMember = {
+        id: 'bot123',
+        user: { id: 'bot123' }
+      };
+
+      mockChannel.send = jest.fn().mockResolvedValue({ id: 'msg123' });
+      mockChannel.permissionsFor = jest.fn().mockReturnValue(mockPermissions);
+
+      mockGuild.name = 'Test Guild';
+      mockGuild.id = 'guild123';
+      mockGuild.members = {
+        cache: new Map([['bot123', mockBotMember]])
+      };
+      mockGuild.channels.cache.get = jest.fn().mockReturnValue(mockChannel);
+
+      mockClient.user = { id: 'bot123' };
+      mockClient.guilds.cache.get.mockReturnValue(mockGuild);
+    });
+
+    it('should post deployment confirmation successfully', async () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      await bot.postDeploymentConfirmation();
+
+      expect(mockChannel.send).toHaveBeenCalledWith(
+        expect.stringMatching(/🤖 \*\*Bot test-run-123 Online\*\* - New version deployed and ready/)
+      );
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Posted deployment confirmation'));
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle guild not found', async () => {
+      mockClient.guilds.cache.get.mockReturnValue(null);
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      await bot.postDeploymentConfirmation();
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Guild not found for deployment confirmation')
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle channel not found', async () => {
+      mockGuild.channels.cache.get.mockReturnValue(null);
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      await bot.postDeploymentConfirmation();
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Moderator bot channel not found')
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle bot member not found', async () => {
+      mockGuild.members.cache.clear();
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      await bot.postDeploymentConfirmation();
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Bot member not found in guild')
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle missing send permissions', async () => {
+      mockPermissions.has.mockReturnValue(false);
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      await bot.postDeploymentConfirmation();
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Bot does not have SendMessages permission')
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle channel send errors', async () => {
+      mockChannel.send.mockRejectedValue(new Error('Send failed'));
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      await bot.postDeploymentConfirmation();
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Error posting deployment confirmation:'),
+        expect.any(Error)
+      );
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('postShutdownMessage', () => {
+    beforeEach(() => {
+      bot.guildId = 'guild123';
+      bot.commandChannelId = 'command123';
+      bot.runId = 'test-run-123';
+      bot.client = mockClient;
+      bot.shutdownMessageSent = false;
+
+      mockChannel.send = jest.fn().mockResolvedValue({ id: 'msg123' });
+      mockGuild.channels.cache.get = jest.fn().mockReturnValue(mockChannel);
+      mockClient.guilds.cache.get.mockReturnValue(mockGuild);
+    });
+
+    it('should send shutdown message successfully', async () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      await bot.postShutdownMessage('Test shutdown');
+
+      expect(mockChannel.send).toHaveBeenCalledWith(
+        expect.stringMatching(/🔄 \*\*Bot test-run-123 Shutting Down\*\* - Test shutdown/)
+      );
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Posted shutdown message'));
+      consoleSpy.mockRestore();
+    });
+
+    it('should prevent duplicate shutdown messages', async () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      
+      // Send first message
+      await bot.postShutdownMessage('First shutdown');
+      expect(bot.shutdownMessageSent).toBe(true);
+      
+      // Attempt to send second message
+      await bot.postShutdownMessage('Duplicate shutdown');
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Shutdown message already sent, skipping duplicate')
+      );
+      // Should only be called once for the first message
+      expect(mockChannel.send).toHaveBeenCalledTimes(1);
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle timeout during shutdown message', async () => {
+      // Mock a delay that exceeds the 5 second timeout
+      mockChannel.send.mockImplementation(() => new Promise(resolve => setTimeout(resolve, 6000)));
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      await bot.postShutdownMessage('Timeout test');
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Error posting shutdown message:'),
+        expect.any(Error)
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle guild not found during shutdown', async () => {
+      mockClient.guilds.cache.get.mockReturnValue(null);
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      await bot.postShutdownMessage('Guild missing test');
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Guild not found for shutdown message')
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle channel not found during shutdown', async () => {
+      mockGuild.channels.cache.get.mockReturnValue(null);
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      await bot.postShutdownMessage('Channel missing test');
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Moderator bot channel')
+      );
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('ready event with postDeploymentConfirmation', () => {
+    let readyHandler;
+
+    beforeEach(() => {
+      bot.guildId = 'guild123';
+      bot.commandChannelId = 'command123';
+      bot.runId = 'test-run-123';
+      bot.configManager.getConfig.mockReturnValue([]);
+      bot.proposalManager.getActiveVotes.mockReturnValue([]);
+      bot.postDeploymentConfirmation = jest.fn().mockResolvedValue();
+      
+      readyHandler = mockClient.once.mock.calls.find(call => call[0] === 'ready')[1];
+    });
+
+    it('should call postDeploymentConfirmation in ready handler', async () => {
+      const emitSpy = jest.spyOn(process, 'emit').mockImplementation();
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      await readyHandler();
+
+      expect(bot.postDeploymentConfirmation).toHaveBeenCalled();
+      expect(emitSpy).toHaveBeenCalledWith('botReady');
+
+      emitSpy.mockRestore();
+      consoleSpy.mockRestore();
     });
   });
 });

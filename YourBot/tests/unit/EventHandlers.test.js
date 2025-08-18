@@ -386,5 +386,296 @@ describe('EventHandlers', () => {
 
       expect(mockBot.commandHandler.handleCommand).toHaveBeenCalledWith(mockMessage, false);
     });
+
+    it('should process !events command in regional channel', async () => {
+      mockBot.userValidator.isBot.mockReturnValue(false);
+      mockMessage.content = '!events';
+      mockMessage.channel.id = 'some-other-channel';
+      mockMessage.channel.name = 'regional-north-east';
+      
+      const handleEventsCommandSpy = jest.spyOn(eventHandlers, 'handleEventsCommand').mockResolvedValue();
+      
+      await eventHandlers.handleMessage(mockMessage);
+
+      expect(handleEventsCommandSpy).toHaveBeenCalledWith(mockMessage);
+      expect(mockBot.commandHandler.handleCommand).not.toHaveBeenCalled();
+    });
+
+    it('should process !events command in local channel', async () => {
+      mockBot.userValidator.isBot.mockReturnValue(false);
+      mockMessage.content = '!events';
+      mockMessage.channel.id = 'some-other-channel';
+      mockMessage.channel.name = 'local-newcastle';
+      
+      const handleEventsCommandSpy = jest.spyOn(eventHandlers, 'handleEventsCommand').mockResolvedValue();
+      
+      await eventHandlers.handleMessage(mockMessage);
+
+      expect(handleEventsCommandSpy).toHaveBeenCalledWith(mockMessage);
+      expect(mockBot.commandHandler.handleCommand).not.toHaveBeenCalled();
+    });
+
+    it('should not process !events command in non-regional/local channels', async () => {
+      mockBot.userValidator.isBot.mockReturnValue(false);
+      mockMessage.content = '!events';
+      mockMessage.channel.id = 'some-other-channel';
+      mockMessage.channel.name = 'general-chat';
+      
+      const handleEventsCommandSpy = jest.spyOn(eventHandlers, 'handleEventsCommand').mockResolvedValue();
+      
+      await eventHandlers.handleMessage(mockMessage);
+
+      expect(handleEventsCommandSpy).not.toHaveBeenCalled();
+      expect(mockBot.commandHandler.handleCommand).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('isRegionalOrLocalChannel', () => {
+    it('should return true for regional channels', () => {
+      expect(eventHandlers.isRegionalOrLocalChannel('regional-north-east')).toBe(true);
+      expect(eventHandlers.isRegionalOrLocalChannel('regional-london')).toBe(true);
+    });
+
+    it('should return true for local channels', () => {
+      expect(eventHandlers.isRegionalOrLocalChannel('local-newcastle')).toBe(true);
+      expect(eventHandlers.isRegionalOrLocalChannel('local-manchester')).toBe(true);
+    });
+
+    it('should return false for other channels', () => {
+      expect(eventHandlers.isRegionalOrLocalChannel('general')).toBe(false);
+      expect(eventHandlers.isRegionalOrLocalChannel('bot-commands')).toBe(false);
+    });
+
+    it('should return false for null/undefined channel names', () => {
+      expect(eventHandlers.isRegionalOrLocalChannel(null)).toBe(false);
+      expect(eventHandlers.isRegionalOrLocalChannel(undefined)).toBe(false);
+      expect(eventHandlers.isRegionalOrLocalChannel('')).toBe(false);
+    });
+
+    it('should return false for non-string channel names', () => {
+      expect(eventHandlers.isRegionalOrLocalChannel(123)).toBe(false);
+      expect(eventHandlers.isRegionalOrLocalChannel({})).toBe(false);
+    });
+  });
+
+  describe('handleEventsCommand', () => {
+    beforeEach(() => {
+      // Mock the event manager
+      mockBot.getEventManager = jest.fn().mockReturnValue({
+        getUpcomingEventsByRegion: jest.fn().mockResolvedValue([]),
+        getUpcomingEventsByLocation: jest.fn().mockResolvedValue([])
+      });
+
+      // Setup guild and member
+      mockMessage.guild = {
+        id: 'guild123',
+        members: {
+          cache: new Map([['user123', { user: { id: 'user123' } }]])
+        }
+      };
+      mockMessage.author = { id: 'user123' };
+      
+      mockBot.userValidator.hasRole.mockReturnValue(true);
+    });
+
+    it('should handle !events in regional channel with no events', async () => {
+      mockMessage.channel.name = 'regional-north-east';
+      
+      await eventHandlers.handleEventsCommand(mockMessage);
+
+      expect(mockBot.getEventManager().getUpcomingEventsByRegion).toHaveBeenCalledWith('guild123', 'North East');
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('No upcoming events found for North East'));
+    });
+
+    it('should handle !events in local channel with no events', async () => {
+      mockMessage.channel.name = 'local-newcastle';
+      
+      await eventHandlers.handleEventsCommand(mockMessage);
+
+      expect(mockBot.getEventManager().getUpcomingEventsByLocation).toHaveBeenCalledWith('guild123', 'Newcastle');
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('No upcoming events found for Newcastle'));
+    });
+
+    it('should handle !events in regional channel with events', async () => {
+      mockMessage.channel.name = 'regional-london';
+      
+      const mockEvents = [
+        {
+          name: 'Community Meeting',
+          event_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          region: 'London',
+          location: 'Central London',
+          link: 'https://example.com/event1',
+          created_by: 'user456'
+        }
+      ];
+      
+      mockBot.getEventManager().getUpcomingEventsByRegion.mockResolvedValue(mockEvents);
+      
+      await eventHandlers.handleEventsCommand(mockMessage);
+
+      expect(mockBot.getEventManager().getUpcomingEventsByRegion).toHaveBeenCalledWith('guild123', 'London');
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringMatching(/Community Meeting/));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringMatching(/Central London/));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringMatching(/https:\/\/example\.com\/event1/));
+    });
+
+    it('should handle !events in local channel with events without links', async () => {
+      mockMessage.channel.name = 'local-manchester';
+      
+      const mockEvents = [
+        {
+          name: 'Local Meetup',
+          event_date: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+          region: 'North West',
+          location: 'Manchester',
+          created_by: 'user789'
+        }
+      ];
+      
+      mockBot.getEventManager().getUpcomingEventsByLocation.mockResolvedValue(mockEvents);
+      
+      await eventHandlers.handleEventsCommand(mockMessage);
+
+      expect(mockBot.getEventManager().getUpcomingEventsByLocation).toHaveBeenCalledWith('guild123', 'Manchester');
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringMatching(/Local Meetup/));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringMatching(/North West.*Manchester/));
+    });
+
+    it('should handle complex location names with slashes/dashes', async () => {
+      mockMessage.channel.name = 'local-blyth-ashington-morpeth';
+      
+      await eventHandlers.handleEventsCommand(mockMessage);
+
+      expect(mockBot.getEventManager().getUpcomingEventsByLocation).toHaveBeenCalledWith('guild123', 'Blyth/Ashington/Morpeth');
+    });
+
+    it('should reject users without member role', async () => {
+      mockBot.userValidator.hasRole.mockReturnValue(false);
+      mockMessage.channel.name = 'regional-london';
+      
+      await eventHandlers.handleEventsCommand(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ You need the member role to use this command.');
+      expect(mockBot.getEventManager().getUpcomingEventsByRegion).not.toHaveBeenCalled();
+    });
+
+    it('should handle member not found in guild', async () => {
+      mockMessage.guild.members.cache.clear();
+      mockMessage.channel.name = 'regional-london';
+      
+      await eventHandlers.handleEventsCommand(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ Could not find your membership in this server.');
+      expect(mockBot.getEventManager().getUpcomingEventsByRegion).not.toHaveBeenCalled();
+    });
+
+    it('should handle errors gracefully', async () => {
+      mockMessage.channel.name = 'regional-london';
+      mockBot.getEventManager().getUpcomingEventsByRegion.mockRejectedValue(new Error('Database error'));
+      
+      await eventHandlers.handleEventsCommand(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ An error occurred while fetching events.');
+    });
+  });
+
+  describe('getTimeUntilEvent', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2025-08-18T12:00:00Z'));
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('should return "in X days" for future events', () => {
+      const futureDate = new Date('2025-08-20T12:00:00Z'); // 2 days from now
+      expect(eventHandlers.getTimeUntilEvent(futureDate)).toBe('in 2 days');
+    });
+
+    it('should return "in 1 day" for single day', () => {
+      const futureDate = new Date('2025-08-19T12:00:00Z'); // 1 day from now
+      expect(eventHandlers.getTimeUntilEvent(futureDate)).toBe('in 1 day');
+    });
+
+    it('should return "in X hours" for same day future events', () => {
+      const futureDate = new Date('2025-08-18T15:00:00Z'); // 3 hours from now
+      expect(eventHandlers.getTimeUntilEvent(futureDate)).toBe('in 3 hours');
+    });
+
+    it('should return "in 1 hour" for single hour', () => {
+      const futureDate = new Date('2025-08-18T13:00:00Z'); // 1 hour from now
+      expect(eventHandlers.getTimeUntilEvent(futureDate)).toBe('in 1 hour');
+    });
+
+    it('should return "very soon" for events less than 1 hour away', () => {
+      const futureDate = new Date('2025-08-18T12:30:00Z'); // 30 minutes from now
+      expect(eventHandlers.getTimeUntilEvent(futureDate)).toBe('very soon');
+    });
+
+    it('should return "just started" for events that just started', () => {
+      const pastDate = new Date('2025-08-18T11:59:30Z'); // 30 seconds ago
+      expect(eventHandlers.getTimeUntilEvent(pastDate)).toBe('just started');
+    });
+
+    it('should return "started X minutes ago" for recently started events', () => {
+      const pastDate = new Date('2025-08-18T11:45:00Z'); // 15 minutes ago
+      expect(eventHandlers.getTimeUntilEvent(pastDate)).toBe('started 15m ago');
+    });
+
+    it('should return "started X hours ago" for events started hours ago', () => {
+      const pastDate = new Date('2025-08-18T09:00:00Z'); // 3 hours ago
+      expect(eventHandlers.getTimeUntilEvent(pastDate)).toBe('started 3h ago');
+    });
+  });
+
+  describe('processReaction error handling', () => {
+    it('should handle errors in processReaction gracefully', async () => {
+      const mockReaction = {
+        emoji: { name: '✅' },
+        message: mockMessage,
+        partial: false
+      };
+      
+      // Mock both handlers to throw errors
+      jest.spyOn(eventHandlers, 'handleReaction').mockRejectedValue(new Error('Reaction error'));
+      jest.spyOn(eventHandlers, 'handleProposalReaction').mockRejectedValue(new Error('Proposal error'));
+      
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      
+      // This should not throw despite the errors - processReaction has error handling
+      await eventHandlers.processReaction(mockReaction, mockUser, 'add');
+      
+      expect(consoleSpy).toHaveBeenCalledWith('Error processing reaction:', expect.any(Error));
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('handleProposalReaction error cases', () => {
+    it('should handle vote reaction with remove type', async () => {
+      const mockReaction = {
+        emoji: { name: '❌' },
+        message: {
+          ...mockMessage,
+          guild: { id: mockBot.getGuildId() },
+          channel: { id: '123456789012345684' } // vote channel
+        },
+        partial: false
+      };
+
+      mockBot.proposalManager.proposalConfig = {
+        policy: {
+          debateChannelId: '123456789012345683',
+          voteChannelId: '123456789012345684',
+          resolutionsChannelId: '123456789012345685'
+        }
+      };
+
+      await eventHandlers.handleProposalReaction(mockReaction, mockUser, 'remove');
+
+      expect(mockBot.proposalManager.handleVoteReaction).toHaveBeenCalledWith(mockReaction.message, '❌', false);
+    });
   });
 });

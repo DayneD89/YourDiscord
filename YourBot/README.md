@@ -29,6 +29,7 @@ Create a `runtime.config.json` file with your settings:
   "memberCommandChannelId": "YOUR_MEMBER_COMMANDS_CHANNEL_ID",
   "s3Bucket": "your-s3-bucket-name",
   "dynamodbTable": "your-dynamodb-table-name",
+  "eventsTable": "your-events-table-name",
   "config": [],
   "proposalConfig": {
     "policy": {
@@ -122,7 +123,9 @@ YourBot/
 │   ├── ProposalManager.js      # Governance system coordinator
 │   ├── DynamoProposalStorage.js # DynamoDB-backed proposal persistence
 │   ├── ProposalParser.js       # Proposal format validation
-│   └── WithdrawalProcessor.js  # Resolution withdrawal handling
+│   ├── WithdrawalProcessor.js  # Resolution withdrawal handling
+│   ├── EventManager.js         # Community event management system
+│   └── EventStorage.js         # DynamoDB-backed event persistence
 ├── bot.js                      # Application entry point
 ├── package.json                # Dependencies and scripts
 ├── package-lock.json           # Dependency lock file
@@ -173,10 +176,12 @@ This project uses **AWS SDK v3** for all AWS service interactions, providing imp
 - `@aws-sdk/client-s3`: S3 operations for configuration data
 - `@aws-sdk/client-dynamodb`: DynamoDB table operations and schema management
 - `@aws-sdk/lib-dynamodb`: High-level DynamoDB document operations
+- `uuid`: UUID generation for event and entity identifiers
 
 ### Storage Architecture
 - **S3**: Configuration files and bot settings
 - **DynamoDB**: All proposal data with optimized querying and indexing
+- **DynamoDB Events**: Community event data with automatic reminders and TTL
 
 ### Migration Notes
 The project was successfully migrated from AWS SDK v2 to v3, maintaining full backward compatibility while gaining:
@@ -255,6 +260,7 @@ constructor() {
     this.proposalManager = new ProposalManager(this); // Community governance system
     this.eventHandlers = new EventHandlers(this);    // Discord event processing
     this.commandHandler = new CommandHandler(this);   // Bot command execution
+    this.eventManager = null;                         // Community event system (initialized with config)
 }
 ```
 
@@ -274,6 +280,10 @@ async initialize() {
     // Initialize community proposal/voting system
     // This enables democratic governance features for the community
     await this.proposalManager.initialize(/*...*/);
+
+    // Initialize community event management system
+    // This enables event creation, notifications, and automated reminders
+    this.eventManager = new EventManager(this);
     
     // Connect to Discord and start processing events
     // Bot becomes active and responsive after this point
@@ -984,6 +994,197 @@ ${proposal.content}
 - Adding withdrawal approval workflows
 - Implementing withdrawal permissions
 - Adding withdrawal audit trails
+
+---
+
+### `src/EventManager.js`
+**Purpose**: Manages community events with automated notifications and reminders, enabling moderators to schedule regional and local events.
+
+**Key Responsibilities**:
+- Creating and validating community events
+- Sending notifications to appropriate regional and local channels
+- Managing automated reminder system (7-day and 24-hour)
+- Coordinating with EventStorage for data persistence
+
+**Event Lifecycle**:
+1. **Creation**: Moderator uses `!addevent` command with event details
+2. **Validation**: Event data validated for required fields and future dates
+3. **Notification**: Initial announcements sent to regional/local channels
+4. **Reminders**: Automated reminders at 7 days and 24 hours before event
+5. **Cleanup**: Events automatically deleted 30 days after occurrence
+
+**Important Methods**:
+
+#### `createEvent(guildId, eventData, createdBy)`
+Creates new event with comprehensive validation and notification.
+
+```javascript
+async createEvent(guildId, eventData, createdBy) {
+    // Validate event data for required fields and future dates
+    const validation = this.validateEventData(eventData);
+    if (!validation.valid) {
+        throw new Error(validation.error);
+    }
+
+    // Check if region/location roles exist in Discord
+    const guild = this.bot.client.guilds.cache.get(guildId);
+    const regionRole = this.findRoleByName(guild, eventData.region);
+    
+    if (!regionRole) {
+        throw new Error(`Region role "${eventData.region}" not found`);
+    }
+
+    // Create event in database with UUID and TTL
+    const event = await this.storage.createEvent(guildId, {
+        ...eventData,
+        createdBy: createdBy.id
+    });
+
+    // Send notifications to appropriate channels
+    await this.sendEventNotification(guild, event, regionRole, locationRole);
+    
+    return event;
+}
+```
+
+#### `startReminderChecker()`
+Initializes automated reminder system with hourly checking.
+
+```javascript
+startReminderChecker() {
+    // Check every hour for events needing reminders
+    setInterval(() => {
+        this.checkReminders();
+    }, 60 * 60 * 1000); // 1 hour
+
+    // Initial check 30 seconds after startup
+    setTimeout(() => {
+        this.checkReminders();
+    }, 30000);
+}
+```
+
+#### `sendEventNotification(guild, event, regionRole, locationRole)`
+Sends formatted event announcements to regional and local channels.
+
+**Event Format**:
+- **Region**: `London` (required) - Must match existing Discord role
+- **Location**: `Central London` (optional) - Specific area within region
+- **Date**: `2024-08-25 18:00` - Must be in future, YYYY-MM-DD HH:MM format
+- **Description**: Free-form text describing the event
+
+**Channel Naming Convention**:
+- Regional channels: `regional-{region}` (e.g., `regional-london`)
+- Local channels: `local-{location}` (e.g., `local-central-london`)
+
+**When to Modify**:
+- Adding new reminder intervals
+- Implementing event categories or types
+- Adding RSVP or attendance tracking
+- Integrating with external calendar systems
+
+---
+
+### `src/EventStorage.js`
+**Purpose**: Provides DynamoDB-backed persistence for community events with efficient querying and automatic cleanup.
+
+**Key Responsibilities**:
+- CRUD operations for event data
+- Querying events by region, date, and status
+- Managing reminder status updates
+- Automatic TTL-based cleanup
+
+**Database Schema**:
+```javascript
+{
+  guild_id: 'string',           // Partition key
+  event_id: 'uuid',             // Range key
+  name: 'string',               // Event name
+  description: 'string',        // Event description
+  region: 'string',             // Target region
+  location: 'string',           // Specific location (optional)
+  event_date: 'ISO string',     // Event date/time
+  created_by: 'string',         // Creator user ID
+  created_at: 'ISO string',     // Creation timestamp
+  reminder_status: 'string',    // pending|week_sent|day_sent|completed
+  ttl: 'number'                 // Auto-deletion timestamp
+}
+```
+
+**GSI Indexes**:
+- `region-index`: Query events by region for regional notifications
+- `date-index`: Query upcoming events for reminder processing
+
+**Important Methods**:
+
+#### `createEvent(guildId, eventData)`
+Creates new event with UUID generation and TTL calculation.
+
+```javascript
+async createEvent(guildId, eventData) {
+    const eventId = uuidv4();
+    const now = new Date().toISOString();
+    
+    // Calculate TTL (30 days after event date)
+    const eventDate = new Date(eventData.eventDate);
+    const ttlDate = new Date(eventDate.getTime() + (30 * 24 * 60 * 60 * 1000));
+    const ttl = Math.floor(ttlDate.getTime() / 1000);
+
+    const event = {
+        guild_id: guildId,
+        event_id: eventId,
+        name: eventData.name,
+        region: eventData.region,
+        event_date: eventData.eventDate,
+        reminder_status: 'pending',
+        ttl: ttl
+    };
+
+    await this.docClient.send(new PutCommand({
+        TableName: this.tableName,
+        Item: event,
+        ConditionExpression: 'attribute_not_exists(event_id)'
+    }));
+
+    return event;
+}
+```
+
+#### `getUpcomingEvents(guildId)`
+Retrieves events needing reminders within the next 7 days.
+
+```javascript
+async getUpcomingEvents(guildId) {
+    const now = new Date().toISOString();
+    const weekFromNow = new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)).toISOString();
+    
+    const command = new QueryCommand({
+        TableName: this.tableName,
+        IndexName: 'date-index',
+        KeyConditionExpression: 'guild_id = :guildId AND event_date BETWEEN :now AND :weekFromNow',
+        ExpressionAttributeValues: {
+            ':guildId': guildId,
+            ':now': now,
+            ':weekFromNow': weekFromNow
+        }
+    });
+
+    const result = await this.docClient.send(command);
+    return result.Items || [];
+}
+```
+
+**Reminder Status Flow**:
+1. `pending` → Event created, no reminders sent
+2. `week_sent` → 7-day reminder sent, waiting for 24-hour reminder
+3. `day_sent` → 24-hour reminder sent, event ready
+4. `completed` → Event occurred, cleanup pending
+
+**When to Modify**:
+- Adding new query patterns or indexes
+- Implementing event categories or metadata
+- Adding batch operations for bulk event management
+- Optimizing TTL or cleanup strategies
 
 ---
 

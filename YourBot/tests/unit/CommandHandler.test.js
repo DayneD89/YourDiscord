@@ -125,6 +125,20 @@ describe('CommandHandler', () => {
       expect(commandHandler.handleForceVote).toHaveBeenCalledWith(mockMessage, 'msg123');
     });
 
+    it('should handle !moderators command', async () => {
+      jest.spyOn(commandHandler, 'handleViewModerators').mockResolvedValue();
+      await commandHandler.handleModeratorCommand(mockMessage, mockMember, '!moderators', true);
+
+      expect(commandHandler.handleViewModerators).toHaveBeenCalledWith(mockMessage);
+    });
+
+    it('should handle !addevent command', async () => {
+      jest.spyOn(commandHandler, 'handleAddEvent').mockResolvedValue();
+      await commandHandler.handleModeratorCommand(mockMessage, mockMember, '!addevent <@&123456789012345670> <@&123456789012345671> "Event" | 2025-08-25 18:00 | https://link.com', true);
+
+      expect(commandHandler.handleAddEvent).toHaveBeenCalledWith(mockMessage, '<@&123456789012345670> <@&123456789012345671> "Event" | 2025-08-25 18:00 | https://link.com');
+    });
+
     it('should handle unknown command', async () => {
       await commandHandler.handleModeratorCommand(mockMessage, mockMember, '!unknown', true);
 
@@ -172,6 +186,13 @@ describe('CommandHandler', () => {
       await commandHandler.handleMemberCommand(mockMessage, mockMember, '!voteinfo msg123', true);
 
       expect(commandHandler.handleVoteInfo).toHaveBeenCalledWith(mockMessage, 'msg123');
+    });
+
+    it('should handle !moderators command', async () => {
+      jest.spyOn(commandHandler, 'handleViewModerators').mockResolvedValue();
+      await commandHandler.handleMemberCommand(mockMessage, mockMember, '!moderators', true);
+
+      expect(commandHandler.handleViewModerators).toHaveBeenCalledWith(mockMessage);
     });
 
     it('should handle unknown command', async () => {
@@ -365,6 +386,211 @@ describe('CommandHandler', () => {
       await commandHandler.handleVoteInfo(mockMessage, 'msg123');
 
       expect(mockMessage.reply).toHaveBeenCalledWith('❌ An error occurred while retrieving vote information.');
+    });
+  });
+
+  describe('handleViewModerators', () => {
+    let mockGuild;
+
+    beforeEach(() => {
+      mockGuild = {
+        roles: {
+          cache: new Map()
+        }
+      };
+      mockMessage.guild = mockGuild;
+      mockBot.getModeratorRoleId = jest.fn(() => 'mod-role-123');
+    });
+
+    it('should handle missing guild', async () => {
+      mockMessage.guild = null;
+      
+      await commandHandler.handleViewModerators(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ Could not access guild information.');
+    });
+
+    it('should handle missing moderator role ID', async () => {
+      mockBot.getModeratorRoleId.mockReturnValue(null);
+      
+      await commandHandler.handleViewModerators(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ Moderator role is not configured.');
+    });
+
+    it('should handle missing moderator role', async () => {
+      await commandHandler.handleViewModerators(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ Moderator role not found.');
+    });
+
+    it('should handle no moderators assigned', async () => {
+      const mockRole = {
+        members: new Map()
+      };
+      mockGuild.roles.cache.set('mod-role-123', mockRole);
+      
+      await commandHandler.handleViewModerators(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('👑 **Current Moderators**: None assigned');
+    });
+
+    it('should list moderators successfully', async () => {
+      const mockModerator = {
+        user: {
+          id: 'user123',
+          username: 'TestModerator',
+          tag: 'TestModerator#1234'
+        },
+        presence: { status: 'online' },
+        joinedAt: new Date('2025-01-01')
+      };
+      
+      const mockRole = {
+        members: new Map([['user123', mockModerator]])
+      };
+      mockGuild.roles.cache.set('mod-role-123', mockRole);
+      
+      mockBot.getProposalManager = jest.fn(() => ({
+        proposalConfig: {
+          moderator: {
+            debateChannelId: 'debate123'
+          }
+        }
+      }));
+      
+      await commandHandler.handleViewModerators(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Current Moderators'));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('TestModerator#1234'));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Want to become a moderator?'));
+    });
+
+    it('should handle errors gracefully', async () => {
+      mockBot.getModeratorRoleId.mockImplementation(() => {
+        throw new Error('Moderator error');
+      });
+      
+      await commandHandler.handleViewModerators(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ An error occurred while retrieving moderator list.');
+    });
+  });
+
+  describe('handleAddEvent', () => {
+    let mockEventManager;
+
+    beforeEach(() => {
+      mockEventManager = {
+        createEvent: jest.fn()
+      };
+      mockBot.getEventManager = jest.fn(() => mockEventManager);
+      mockBot.getGuildId = jest.fn(() => 'guild123');
+      
+      mockMessage.guild = {
+        id: 'guild123',
+        roles: {
+          cache: new Map([
+            ['123456789012345670', { id: '123456789012345670', name: 'London' }],
+            ['123456789012345671', { id: '123456789012345671', name: 'Central London' }]
+          ])
+        }
+      };
+      
+      // Mock role mentions
+      mockMessage.mentions = {
+        roles: new Map([
+          ['123456789012345670', { id: '123456789012345670', name: 'London' }],
+          ['123456789012345671', { id: '123456789012345671', name: 'Central London' }]
+        ])
+      };
+    });
+
+    it('should handle empty event args', async () => {
+      await commandHandler.handleAddEvent(mockMessage, '');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Event command format:'));
+    });
+
+    it('should handle invalid format (missing pipes)', async () => {
+      await commandHandler.handleAddEvent(mockMessage, 'invalid format');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Invalid format.'));
+    });
+
+    it('should handle missing role mentions', async () => {
+      await commandHandler.handleAddEvent(mockMessage, 'No roles here "Event" | 2025-08-25 18:00 | https://link.com');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Missing role mentions'));
+    });
+
+    it('should handle invalid date format', async () => {
+      await commandHandler.handleAddEvent(mockMessage, '<@&123456789012345670> "Event" | invalid-date | https://link.com');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Invalid date format'));
+    });
+
+    it('should handle invalid link format', async () => {
+      await commandHandler.handleAddEvent(mockMessage, '<@&123456789012345670> "Event" | 2025-08-25 18:00 | invalid-link');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Invalid link format'));
+    });
+
+    it('should create event successfully', async () => {
+      const mockEvent = { event_id: 'event123', name: 'Test Event', link: 'https://example.com' };
+      mockEventManager.createEvent.mockResolvedValue(mockEvent);
+      
+      await commandHandler.handleAddEvent(mockMessage, '<@&123456789012345670> <@&123456789012345671> "Test Event" | 2025-08-25 18:00 | https://example.com');
+
+      expect(mockEventManager.createEvent).toHaveBeenCalledWith(
+        'guild123',
+        {
+          name: 'Test Event',
+          region: 'London',
+          location: 'Central London',
+          eventDate: '2025-08-25 18:00',
+          link: 'https://example.com'
+        },
+        mockMessage.author,
+        { id: '123456789012345670', name: 'London' },
+        { id: '123456789012345671', name: 'Central London' }
+      );
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Event created successfully'));
+    });
+
+    it('should handle event creation error', async () => {
+      mockEventManager.createEvent.mockRejectedValue(new Error('Event creation failed'));
+      
+      await commandHandler.handleAddEvent(mockMessage, '<@&123456789012345670> "Test Event" | 2025-08-25 18:00 | https://example.com');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('An error occurred while creating the event'));
+    });
+
+    it('should create regional event without location', async () => {
+      const mockEvent = { event_id: 'event123', name: 'Regional Event' };
+      mockEventManager.createEvent.mockResolvedValue(mockEvent);
+      
+      await commandHandler.handleAddEvent(mockMessage, '<@&123456789012345670> "Regional Event" | 2025-08-25 18:00 | https://example.com');
+
+      expect(mockEventManager.createEvent).toHaveBeenCalledWith(
+        'guild123',
+        {
+          name: 'Regional Event',
+          region: 'London',
+          location: null,
+          eventDate: '2025-08-25 18:00',
+          link: 'https://example.com'
+        },
+        mockMessage.author,
+        { id: '123456789012345670', name: 'London' },
+        null
+      );
+    });
+
+    it('should handle missing event name', async () => {
+      await commandHandler.handleAddEvent(mockMessage, '<@&123456789012345670> | 2025-08-25 18:00 | https://example.com');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Missing event name'));
     });
   });
 
