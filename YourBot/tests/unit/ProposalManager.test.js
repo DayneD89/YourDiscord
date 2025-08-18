@@ -105,6 +105,11 @@ describe('ProposalManager', () => {
 
   afterEach(() => {
     jest.useRealTimers();
+    
+    // Clean up ProposalManager timers if instance exists
+    if (proposalManager && typeof proposalManager.cleanup === 'function') {
+      proposalManager.cleanup();
+    }
   });
 
   describe('constructor', () => {
@@ -149,10 +154,21 @@ describe('ProposalManager', () => {
       const setIntervalSpy = jest.spyOn(global, 'setInterval');
       const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
 
+      // Temporarily remove JEST_WORKER_ID to allow monitor to start
+      const originalJestWorkerId = process.env.JEST_WORKER_ID;
+      delete process.env.JEST_WORKER_ID;
+
       await proposalManager.initialize('test-dynamo-table', 'guild123', mockConfig);
 
-      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 60000);
-      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 5000);
+      try {
+        expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 60000);
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 5000);
+      } finally {
+        // Always restore JEST_WORKER_ID
+        if (originalJestWorkerId) {
+          process.env.JEST_WORKER_ID = originalJestWorkerId;
+        }
+      }
     });
   });
 
@@ -693,7 +709,7 @@ describe('ProposalManager', () => {
   });
 
   describe('voting monitor integration', () => {
-    it('should call checkEndedVotes on interval', async () => {
+    it('should call checkEndedVotes on interval when not in Jest', async () => {
       const mockConfig = {
         policy: {
           supportThreshold: 5,
@@ -703,19 +719,29 @@ describe('ProposalManager', () => {
         }
       };
 
+      // Temporarily remove JEST_WORKER_ID to allow monitor to start
+      const originalJestWorkerId = process.env.JEST_WORKER_ID;
+      delete process.env.JEST_WORKER_ID;
+
       const checkEndedVotesSpy = jest.spyOn(proposalManager, 'checkEndedVotes').mockResolvedValue(undefined);
 
-      await proposalManager.initialize('test-dynamo-table', 'guild123', mockConfig);
+      try {
+        await proposalManager.initialize('test-dynamo-table', 'guild123', mockConfig);
 
-      // Fast-forward the timer
-      jest.advanceTimersByTime(60000);
+        // Fast-forward the timer
+        jest.advanceTimersByTime(60000);
 
-      expect(checkEndedVotesSpy).toHaveBeenCalled();
-
-      checkEndedVotesSpy.mockRestore();
+        expect(checkEndedVotesSpy).toHaveBeenCalled();
+      } finally {
+        // Always restore JEST_WORKER_ID
+        if (originalJestWorkerId) {
+          process.env.JEST_WORKER_ID = originalJestWorkerId;
+        }
+        checkEndedVotesSpy.mockRestore();
+      }
     });
 
-    it('should call checkEndedVotes on startup delay', async () => {
+    it('should call checkEndedVotes on startup delay when not in Jest', async () => {
       const mockConfig = {
         policy: {
           supportThreshold: 5,
@@ -725,16 +751,26 @@ describe('ProposalManager', () => {
         }
       };
 
+      // Temporarily remove JEST_WORKER_ID to allow monitor to start
+      const originalJestWorkerId = process.env.JEST_WORKER_ID;
+      delete process.env.JEST_WORKER_ID;
+
       const checkEndedVotesSpy = jest.spyOn(proposalManager, 'checkEndedVotes').mockResolvedValue(undefined);
 
-      await proposalManager.initialize('test-dynamo-table', 'guild123', mockConfig);
+      try {
+        await proposalManager.initialize('test-dynamo-table', 'guild123', mockConfig);
 
-      // Fast-forward the startup delay
-      jest.advanceTimersByTime(5000);
+        // Fast-forward the startup delay
+        jest.advanceTimersByTime(5000);
 
-      expect(checkEndedVotesSpy).toHaveBeenCalled();
-
-      checkEndedVotesSpy.mockRestore();
+        expect(checkEndedVotesSpy).toHaveBeenCalled();
+      } finally {
+        // Always restore JEST_WORKER_ID
+        if (originalJestWorkerId) {
+          process.env.JEST_WORKER_ID = originalJestWorkerId;
+        }
+        checkEndedVotesSpy.mockRestore();
+      }
     });
   });
 
@@ -752,12 +788,15 @@ describe('ProposalManager', () => {
     });
 
     it('should log errors when processing ended votes fails', async () => {
+      const now = new Date();
+      const pastDate = new Date(now.getTime() - 10000); // 10 seconds ago
+      
       const mockEndedVotes = [
-        { message_id: 'msg1', proposal_type: 'policy' },
-        { message_id: 'msg2', proposal_type: 'policy' }
+        { message_id: 'msg1', proposal_type: 'policy', end_time: pastDate.toISOString() },
+        { message_id: 'msg2', proposal_type: 'policy', end_time: pastDate.toISOString() }
       ];
 
-      mockStorage.getActiveVotes.mockReturnValue(mockEndedVotes);
+      mockStorage.getActiveVotes.mockResolvedValue(mockEndedVotes);
       
       // Mock processEndedVote to fail for one vote
       const processEndedVoteSpy = jest.spyOn(proposalManager, 'processEndedVote')
@@ -765,6 +804,7 @@ describe('ProposalManager', () => {
         .mockRejectedValueOnce(new Error('Failed to process vote')); // Second fails
       
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      jest.spyOn(console, 'log').mockImplementation(); // Suppress other logs
 
       await proposalManager.checkEndedVotes();
 
@@ -920,22 +960,21 @@ describe('ProposalManager', () => {
         }
       };
 
-      mockGuild.channels.cache.get
-        .mockReturnValueOnce(mockDebateChannel1)
-        .mockReturnValueOnce(mockDebateChannel2);
+      // Mock guild channels to return the appropriate debate channel for each proposal type
+      mockGuild.channels.cache.get = jest.fn((channelId) => {
+        if (channelId === 'debate123') return mockDebateChannel1;
+        if (channelId === 'debate456') return mockDebateChannel2;
+        return null;
+      });
 
-      // Mock parser to recognize valid proposals
-      mockParser.getProposalType
-        .mockReturnValueOnce({
-          type: 'policy',
-          isWithdrawal: false,
-          config: { supportThreshold: 5 }
-        })
-        .mockReturnValueOnce({
-          type: 'policy',
-          isWithdrawal: false,
-          config: { supportThreshold: 5 }
-        });
+      // Mock parser to recognize valid proposals - only called once per message
+      mockParser.getProposalType.mockReturnValue({
+        type: 'policy',
+        isWithdrawal: false,
+        config: { supportThreshold: 5 }
+      });
+      
+      // Ensure parser is called for each distinct message/channel pair
 
       // Mock storage to return null (no existing proposals)
       mockStorage.getProposal.mockResolvedValue(null);
@@ -1146,7 +1185,7 @@ describe('ProposalManager', () => {
     });
 
     it('should exclude bot reactions from support count', async () => {
-      const mockDebateChannel = {
+      const mockDebateChannel1 = {
         id: 'debate123',
         messages: {
           fetch: jest.fn().mockResolvedValue(new Map([
@@ -1165,7 +1204,19 @@ describe('ProposalManager', () => {
         }
       };
 
-      mockGuild.channels.cache.get.mockReturnValue(mockDebateChannel);
+      const mockDebateChannel2 = {
+        id: 'debate456',
+        messages: {
+          fetch: jest.fn().mockResolvedValue(new Map()) // Empty for governance channel
+        }
+      };
+
+      // Mock guild channels to return the appropriate debate channel for each proposal type
+      mockGuild.channels.cache.get = jest.fn((channelId) => {
+        if (channelId === 'debate123') return mockDebateChannel1;
+        if (channelId === 'debate456') return mockDebateChannel2;
+        return null;
+      });
       mockStorage.getProposal.mockResolvedValue(null);
       mockParser.getProposalType.mockReturnValue({
         type: 'policy',

@@ -46,31 +46,43 @@ process.on("exit", () => {
   }
 });
 
-process.on("SIGTERM", () => {
-  console.log("🛑 Received SIGTERM, shutting down gracefully...");
-  if (fs.existsSync(healthFile)) {
-    fs.unlinkSync(healthFile);
-  }
-  process.exit(0);
+process.on("SIGTERM", async () => {
+  console.log("🛑 Enhanced wrapper received SIGTERM, giving main bot time to send shutdown message...");
+  
+  // Give main bot 8 seconds to send shutdown message before cleaning up
+  setTimeout(() => {
+    console.log("🛑 Enhanced wrapper shutting down after timeout...");
+    if (fs.existsSync(healthFile)) {
+      fs.unlinkSync(healthFile);
+    }
+    process.exit(0);
+  }, 8000);
+  
+  // The main bot process will handle the actual shutdown message and termination
 });
 
 // Handle SIGUSR1 signal from health check for ALB draining detection
 process.on("SIGUSR1", async () => {
-  console.log("🔄 Received SIGUSR1 signal (ALB draining detected) - triggering bot shutdown message...");
+  const timestamp = new Date().toISOString();
+  console.log(`🔄 [${timestamp}] Enhanced wrapper received SIGUSR1 signal (ALB draining detected) - triggering bot shutdown message...`);
   
   // Create a draining file to signal the bot
   const drainingFile = "/tmp/bot-draining";
   fs.writeFileSync(drainingFile, JSON.stringify({
     draining: true,
-    timestamp: new Date().toISOString(),
+    timestamp: timestamp,
     reason: "ALB draining detected by health check"
+  }));
+  
+  // Create a marker file for debugging
+  fs.writeFileSync("/tmp/sigusr1-received", JSON.stringify({
+    timestamp: timestamp,
+    processReceived: "enhanced-wrapper"
   }));
   
   // Emit a custom event that the main bot can listen to
   process.emit('albDraining');
-  
-  // Also emit earlyShutdown for compatibility
-  process.emit('earlyShutdown');
+  console.log(`🔄 [${timestamp}] Emitted albDraining event to main bot process`);
 });
 
 console.log("🚀 Enhanced bot launcher starting...");

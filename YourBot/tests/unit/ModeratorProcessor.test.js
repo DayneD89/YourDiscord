@@ -328,5 +328,22 @@ describe('ModeratorProcessor', () => {
             expect(processor.getActionSummary(content1)).toBe('Add 123456789012345678 as moderator');
             expect(processor.getActionSummary(content2)).toBe('Remove <@!987654321098765432> from moderator role');
         });
+
+        it('should return unknown action for unexpected action type', () => {
+            // Mock parseModeratorProposal to return an unexpected action type
+            const originalParse = processor.parseModeratorProposal;
+            processor.parseModeratorProposal = jest.fn().mockReturnValue({
+                action: 'unexpected',
+                userId: '123456789012345678',
+                targetText: '<@123456789012345678>'
+            });
+            
+            const result = processor.getActionSummary('**Unknown Action**: <@123456789012345678>');
+            
+            expect(result).toBe('Unknown moderator action');
+            
+            // Restore original method
+            processor.parseModeratorProposal = originalParse;
+        });
     });
 });

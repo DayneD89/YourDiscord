@@ -40,7 +40,7 @@ class EventStorage {
             description: eventData.description || '',
             region: eventData.region,
             location: eventData.location || '',
-            event_date: eventData.eventDate,
+            event_date: eventData.eventDate, // Should already be ISO string from EventManager validation
             link: eventData.link || '',
             created_by: eventData.createdBy,
             created_at: now,
@@ -199,16 +199,22 @@ class EventStorage {
      */
     async getAllEvents(guildId, limit = 50, lastEvaluatedKey = null) {
         try {
-            const command = new QueryCommand({
+            const queryParams = {
                 TableName: this.tableName,
                 KeyConditionExpression: 'guild_id = :guildId',
                 ExpressionAttributeValues: {
                     ':guildId': guildId
                 },
                 Limit: limit,
-                ExclusiveStartKey: lastEvaluatedKey,
                 ScanIndexForward: false // Most recent first
-            });
+            };
+            
+            // Only add ExclusiveStartKey if it's not null
+            if (lastEvaluatedKey) {
+                queryParams.ExclusiveStartKey = lastEvaluatedKey;
+            }
+            
+            const command = new QueryCommand(queryParams);
 
             const result = await this.docClient.send(command);
             
@@ -231,11 +237,12 @@ class EventStorage {
             // Show events up to 1 hour after they started
             const cutoffTime = new Date(Date.now() - (1 * 60 * 60 * 1000)).toISOString();
             
+            // Use date-index to efficiently query by date range, then filter by region
             const command = new QueryCommand({
                 TableName: this.tableName,
-                IndexName: 'region-index',
-                KeyConditionExpression: 'guild_id = :guildId AND #region = :region',
-                FilterExpression: 'event_date >= :cutoffTime',
+                IndexName: 'date-index',
+                KeyConditionExpression: 'guild_id = :guildId AND event_date >= :cutoffTime',
+                FilterExpression: '#region = :region',
                 ExpressionAttributeNames: {
                     '#region': 'region'
                 },
@@ -244,12 +251,16 @@ class EventStorage {
                     ':region': region,
                     ':cutoffTime': cutoffTime
                 },
-                Limit: limit,
                 ScanIndexForward: true // Earliest first
             });
 
             const result = await this.docClient.send(command);
-            return result.Items || [];
+            const items = result.Items || [];
+            
+            // Sort by event_date and limit to requested number
+            return items
+                .sort((a, b) => a.event_date.localeCompare(b.event_date))
+                .slice(0, limit);
             
         } catch (error) {
             console.error(`Error getting upcoming events for region ${region}:`, error);
@@ -265,10 +276,12 @@ class EventStorage {
             // Show events up to 1 hour after they started
             const cutoffTime = new Date(Date.now() - (1 * 60 * 60 * 1000)).toISOString();
             
+            // Use date-index to efficiently query by date range, then filter by location
             const command = new QueryCommand({
                 TableName: this.tableName,
-                KeyConditionExpression: 'guild_id = :guildId',
-                FilterExpression: '#location = :location AND event_date >= :cutoffTime',
+                IndexName: 'date-index',
+                KeyConditionExpression: 'guild_id = :guildId AND event_date >= :cutoffTime',
+                FilterExpression: '#location = :location',
                 ExpressionAttributeNames: {
                     '#location': 'location'
                 },
@@ -277,7 +290,6 @@ class EventStorage {
                     ':location': location,
                     ':cutoffTime': cutoffTime
                 },
-                Limit: limit,
                 ScanIndexForward: true
             });
 

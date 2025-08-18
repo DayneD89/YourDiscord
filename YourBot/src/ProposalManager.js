@@ -14,6 +14,10 @@ class ProposalManager {
         this.parser = null;                         // Proposal format parser
         this.withdrawalProcessor = null;            // Handles proposal withdrawals
         this.moderatorProcessor = null;             // Handles moderator role changes
+        
+        // Timer references for cleanup
+        this.votingMonitorTimer = null;
+        this.initialVoteCheckTimer = null;
     }
 
     async initialize(tableName, guildId, proposalConfig) {
@@ -29,8 +33,10 @@ class ProposalManager {
         // Initialize DynamoDB storage for proposal tracking
         await this.storage.initialize(tableName, guildId);
         
-        // Start background monitoring for vote completion
-        this.startVotingMonitor();
+        // Start background monitoring for vote completion - skip only during Jest testing
+        if (!process.env.JEST_WORKER_ID) {
+            this.startVotingMonitor();
+        }
     }
 
     // Process support reactions to determine if proposals should advance to voting
@@ -179,12 +185,27 @@ class ProposalManager {
     startVotingMonitor() {
         // Regular interval checking for ended votes
         // More frequent checking ensures timely vote resolution
-        setInterval(async () => {
+        this.votingMonitorTimer = setInterval(async () => {
             await this.checkEndedVotes();
         }, 60 * 1000);
 
         // Initial check on startup to process any votes that ended while bot was offline
-        setTimeout(() => this.checkEndedVotes(), 5000);
+        this.initialVoteCheckTimer = setTimeout(() => this.checkEndedVotes(), 5000);
+    }
+
+    /**
+     * Cleanup timers - call this during shutdown or in tests
+     */
+    cleanup() {
+        if (this.votingMonitorTimer) {
+            clearInterval(this.votingMonitorTimer);
+            this.votingMonitorTimer = null;
+        }
+        if (this.initialVoteCheckTimer) {
+            clearTimeout(this.initialVoteCheckTimer);
+            this.initialVoteCheckTimer = null;
+        }
+        console.log('ProposalManager timers cleaned up');
     }
 
     // Check all active votes for expiration and process completed ones

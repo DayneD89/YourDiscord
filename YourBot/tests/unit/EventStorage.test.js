@@ -200,6 +200,19 @@ describe('EventStorage', () => {
             expect(result.lastEvaluatedKey).toBe(lastKey);
         });
 
+        test('should handle pagination with lastEvaluatedKey', async () => {
+            const expectedEvents = [{ guild_id: 'guild123', event_id: 'event2' }];
+            const lastKey = { guild_id: 'guild123', event_id: 'event2' };
+            const startKey = { guild_id: 'guild123', event_id: 'event1' };
+            mockDocClient.send.mockResolvedValue({ Items: expectedEvents, LastEvaluatedKey: lastKey });
+
+            const result = await eventStorage.getAllEvents('guild123', 50, startKey);
+
+            expect(mockDocClient.send).toHaveBeenCalled();
+            expect(result.events).toBe(expectedEvents);
+            expect(result.lastEvaluatedKey).toBe(lastKey);
+        });
+
         test('should return empty result on error', async () => {
             mockDocClient.send.mockRejectedValue(new Error('Query error'));
 
@@ -232,9 +245,9 @@ describe('EventStorage', () => {
             expect(result).toEqual(mockEvents);
             expect(QueryCommand).toHaveBeenCalledWith({
                 TableName: 'test-events-table',
-                IndexName: 'region-index',
-                KeyConditionExpression: 'guild_id = :guildId AND #region = :region',
-                FilterExpression: 'event_date >= :cutoffTime',
+                IndexName: 'date-index',
+                KeyConditionExpression: 'guild_id = :guildId AND event_date >= :cutoffTime',
+                FilterExpression: '#region = :region',
                 ExpressionAttributeNames: {
                     '#region': 'region'
                 },
@@ -243,7 +256,6 @@ describe('EventStorage', () => {
                     ':region': 'London',
                     ':cutoffTime': expect.any(String)
                 },
-                Limit: 3,
                 ScanIndexForward: true
             });
         });
@@ -255,7 +267,8 @@ describe('EventStorage', () => {
             await eventStorage.getUpcomingEventsByRegion('guild123', 'London', 5);
 
             expect(QueryCommand).toHaveBeenCalledWith(expect.objectContaining({
-                Limit: 5
+                IndexName: 'date-index',
+                KeyConditionExpression: 'guild_id = :guildId AND event_date >= :cutoffTime'
             }));
         });
 
@@ -295,8 +308,9 @@ describe('EventStorage', () => {
             
             expect(QueryCommand).toHaveBeenCalledWith({
                 TableName: 'test-events-table',
-                KeyConditionExpression: 'guild_id = :guildId',
-                FilterExpression: '#location = :location AND event_date >= :cutoffTime',
+                IndexName: 'date-index',
+                KeyConditionExpression: 'guild_id = :guildId AND event_date >= :cutoffTime',
+                FilterExpression: '#location = :location',
                 ExpressionAttributeNames: {
                     '#location': 'location'
                 },
@@ -305,7 +319,6 @@ describe('EventStorage', () => {
                     ':location': 'Manchester',
                     ':cutoffTime': expect.any(String)
                 },
-                Limit: 3,
                 ScanIndexForward: true
             });
         });
@@ -335,7 +348,8 @@ describe('EventStorage', () => {
             await eventStorage.getUpcomingEventsByLocation('guild123', 'Manchester', 5);
 
             expect(QueryCommand).toHaveBeenCalledWith(expect.objectContaining({
-                Limit: 5
+                IndexName: 'date-index',
+                KeyConditionExpression: 'guild_id = :guildId AND event_date >= :cutoffTime'
             }));
         });
 

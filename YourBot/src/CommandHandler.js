@@ -62,6 +62,14 @@ class CommandHandler {
             await this.handleAddEvent(message, content.substring(10));
         } else if (content.startsWith('!removeevent ')) {
             await this.handleRemoveEvent(message, content.substring(13));
+        } else if (content === '!clearevents') {
+            await this.handleClearEvents(message);
+        } else if (content.startsWith('!boton ')) {
+            await this.handleBotOn(message, content.substring(7));
+        } else if (content.startsWith('!botoff ')) {
+            await this.handleBotOff(message, content.substring(8));
+        } else if (content === '!ping') {
+            await this.handlePing(message);
         } else {
             await message.reply('❓ Unknown moderator command. Type `!help` for available commands.');
         }
@@ -359,11 +367,14 @@ class CommandHandler {
 
 **Event Management:**
 \`!addevent @RegionRole @LocationRole "Event Name" | YYYY-MM-DD HH:MM | <link>\` - Add new event
-\`!removeevent <event_id>\` - Remove an event by ID
-Example: \`!addevent @London @CentralLondon "Community Meeting" | 2024-08-25 18:00 | https://facebook.com/events/123\`
+\`!removeevent @RegionRole @LocationRole "Event Name" | YYYY-MM-DD HH:MM\` - Remove an event
+Examples: 
+- Add: \`!addevent @London @CentralLondon "Community Meeting" | 2024-08-25 18:00 | https://facebook.com/events/123\`
+- Remove: \`!removeevent @London @CentralLondon "Community Meeting" | 2024-08-25 18:00\`
 
 **Community Information:**
-\`!moderators\` - View current server moderators
+\`!moderators\` - View current server moderators  
+\`!ping\` - Check bot status and deployment info
 \`!help\` - Show this help message
 ${proposalInfo}
 **👥 Members can use \`!proposals\`, \`!activevotes\`, and \`!voteinfo\` in their bot channel.**`;
@@ -455,7 +466,7 @@ ${proposalInfo}
             const eventManager = this.bot.getEventManager();
             const event = await eventManager.createEvent(message.guild.id, eventData, message.author, regionRole, locationRole);
 
-            await message.reply(`✅ **Event created successfully!**\n\n**${event.name}**\n📅 **Date:** ${dateStr}\n📍 **Region:** ${regionRole} ${locationRole ? `\n🏘️ **Location:** ${locationRole}` : ''}${event.link ? `\n🔗 **Link:** <${event.link}>` : ''}\n\n🎉 Notifications have been sent to the appropriate channels!`);
+            await message.reply(`✅ **Event created successfully!**\n\n**${event.name}**\n📅 **Date:** ${dateStr}\n📍 **Region:** ${regionRole} ${locationRole ? `\n🏘️ **Location:** ${locationRole}` : ''}${event.link ? `\n🔗 **Link:** <${event.link}>` : ''}\n\n🎉 Notifications have been sent to the appropriate channels!\n\n💡 **To remove this event later:** \`!removeevent ${regionRole} ${locationRole ? `${locationRole} ` : ''}"${event.name}" | ${dateStr}\``);
 
         } catch (error) {
             console.error('Error handling add event command:', error);
@@ -473,29 +484,92 @@ ${proposalInfo}
         }
     }
 
-    async handleRemoveEvent(message, eventIdArg) {
+    async handleRemoveEvent(message, eventArgs) {
         try {
-            const eventId = eventIdArg.trim();
-            
-            if (!eventId) {
-                await message.reply('❌ **Missing event ID.**\n\n**Format:** `!removeevent <event_id>`\n\n**Example:** `!removeevent abc123-def456-ghi789`\n\n💡 **Tip:** Use `!events` in regional channels to find event IDs, or check bot logs when creating events.');
+            if (!eventArgs.trim()) {
+                await message.reply('❌ **Event remove command format:**\n`!removeevent @RegionRole @LocationRole "Event Name" | YYYY-MM-DD HH:MM`\n\n**Examples:**\n`!removeevent @London @CentralLondon "Community Meeting" | 2024-08-25 18:00`\n`!removeevent @Wales @Cardiff "Rally" | 2024-08-30 14:00`\n\n**Notes:**\n- Use same format as when you created the event\n- @LocationRole is optional if event is region-wide\n- Must match exactly (including date and time)');
                 return;
             }
 
-            // Get event details before deleting for confirmation message
+            // Parse arguments using same logic as handleAddEvent
+            const parts = eventArgs.split('|').map(part => part.trim());
+            if (parts.length < 2) {
+                await message.reply('❌ **Invalid format.** Use pipe `|` to separate event details from date.\n\n**Format:** `@RegionRole @LocationRole "Event Name" | YYYY-MM-DD HH:MM`');
+                return;
+            }
+
+            const eventDetailsStr = parts[0];
+            const dateStr = parts[1];
+
+            // Parse role mentions and event name
+            const roleMentions = eventDetailsStr.match(/<@&(\d+)>/g) || [];
+            if (roleMentions.length === 0) {
+                await message.reply('❌ **Missing role mentions.** You must mention at least one region role.\n\n**Format:** `@RegionRole @LocationRole "Event Name"`');
+                return;
+            }
+
+            // Extract event name (everything after the last role mention)
+            const nameMatch = eventDetailsStr.match(/.*>[\s]*(.+)$/);
+            if (!nameMatch) {
+                await message.reply('❌ **Missing event name.** Add the event name after the role mentions.');
+                return;
+            }
+
+            const eventName = nameMatch[1].replace(/^["']|["']$/g, '').trim();
+            if (!eventName) {
+                await message.reply('❌ **Event name cannot be empty.**');
+                return;
+            }
+
+            // Validate and resolve roles
+            const guild = message.guild;
+            const mentionedRoles = roleMentions.map(mention => {
+                const roleId = mention.match(/<@&(\d+)>/)[1];
+                return guild.roles.cache.get(roleId);
+            }).filter(role => role !== undefined);
+
+            if (mentionedRoles.length === 0) {
+                await message.reply('❌ **Invalid role mentions.** Please mention valid server roles.');
+                return;
+            }
+
+            // Parse date
+            const parsedDate = new Date(dateStr);
+            if (isNaN(parsedDate.getTime())) {
+                await message.reply('❌ **Invalid date format.** Use `YYYY-MM-DD HH:MM` format.\n\n**Example:** `2024-08-25 18:00`');
+                return;
+            }
+
+            // Find matching event
             const guildId = this.bot.getGuildId();
-            const event = await this.bot.getEventManager().storage.getEvent(guildId, eventId);
+            const allEvents = await this.bot.getEventManager().storage.getAllEvents(guildId, 100);
             
-            if (!event) {
-                await message.reply(`❌ **Event not found.** No event exists with ID \`${eventId}\`.\n\n💡 **Tip:** Double-check the event ID. Use \`!events\` in regional channels to see current events and their IDs.`);
+            // Look for event that matches name, date, and roles
+            const regionRole = mentionedRoles[0];
+            const locationRole = mentionedRoles[1] || null;
+            
+            const matchingEvent = allEvents.events.find(event => {
+                const eventDate = new Date(event.event_date);
+                const nameMatches = event.name.toLowerCase() === eventName.toLowerCase();
+                const dateMatches = Math.abs(eventDate.getTime() - parsedDate.getTime()) < 60000; // Within 1 minute
+                const regionMatches = event.region.toLowerCase() === regionRole.name.toLowerCase();
+                const locationMatches = locationRole ? 
+                    (event.location && event.location.toLowerCase() === locationRole.name.toLowerCase()) :
+                    !event.location;
+                
+                return nameMatches && dateMatches && regionMatches && locationMatches;
+            });
+
+            if (!matchingEvent) {
+                await message.reply(`❌ **Event not found.** No event matches the provided details.\n\n**Searched for:**\n📅 **${eventName}**\n🌍 Region: ${regionRole.name}\n${locationRole ? `📍 Location: ${locationRole.name}\n` : ''}⏰ Date: ${dateStr}\n\n💡 **Tips:**\n- Event details must match exactly as when created\n- Check spelling of event name and roles\n- Verify date and time format\n- Use \`!events\` in regional channels to see current events`);
                 return;
             }
 
             // Delete the event
-            await this.bot.getEventManager().storage.deleteEvent(guildId, eventId);
+            await this.bot.getEventManager().storage.deleteEvent(guildId, matchingEvent.event_id);
 
             // Send confirmation
-            const eventDate = new Date(event.event_date);
+            const eventDate = new Date(matchingEvent.event_date);
             const formattedDate = eventDate.toLocaleDateString('en-GB', {
                 weekday: 'long',
                 year: 'numeric', 
@@ -508,18 +582,105 @@ ${proposalInfo}
             await message.reply(`✅ **Event removed successfully**
 
 **Removed Event:**
-📅 **${event.name}**
-🌍 Region: ${event.region}
-${event.location ? `📍 Location: ${event.location}\n` : ''}⏰ Date: ${formattedDate}
-🆔 ID: \`${eventId}\`
+📅 **${matchingEvent.name}**
+🌍 Region: ${matchingEvent.region}
+${matchingEvent.location ? `📍 Location: ${matchingEvent.location}\n` : ''}⏰ Date: ${formattedDate}
+🆔 ID: \`${matchingEvent.event_id}\`
 
 The event has been permanently deleted and will no longer appear in event listings or send reminders.`);
 
-            console.log(`🗑️ Event removed by ${message.author.tag}: ${event.name} (${eventId})`);
+            console.log(`🗑️ Event removed by ${message.author.tag}: ${matchingEvent.name} (${matchingEvent.event_id})`);
 
         } catch (error) {
             console.error('Error handling remove event command:', error);
-            await message.reply('❌ An error occurred while removing the event. Please check the event ID and try again.');
+            await message.reply('❌ An error occurred while removing the event. Please check the command format and try again.');
+        }
+    }
+
+    async handleClearEvents(message) {
+        try {
+            const guild = message.guild;
+            const member = guild.members.cache.get(message.author.id);
+            
+            if (!member) {
+                await message.reply('❌ Could not find your membership in this server.');
+                return;
+            }
+
+            // Check if user is administrator (highest permission level)
+            if (!member.permissions.has('Administrator')) {
+                await message.reply('❌ This command is restricted to administrators only.');
+                console.log(`🚨 Non-admin ${message.author.tag} attempted to use !clearevents command`);
+                return;
+            }
+
+            // Get all events to show count before deletion
+            const guildId = this.bot.getGuildId();
+            const allEvents = await this.bot.getEventManager().storage.getAllEvents(guildId, 1000);
+            const eventCount = allEvents.events.length;
+            
+            if (eventCount === 0) {
+                await message.reply('📅 **No events found** - event list is already empty.');
+                return;
+            }
+
+            // Delete all events
+            let deletedCount = 0;
+            for (const event of allEvents.events) {
+                try {
+                    await this.bot.getEventManager().storage.deleteEvent(guildId, event.event_id);
+                    deletedCount++;
+                } catch (error) {
+                    console.error(`Failed to delete event ${event.event_id}:`, error);
+                }
+            }
+
+            await message.reply(`🗑️ **Events cleared by administrator**
+
+**Results:**
+📊 **Found:** ${eventCount} events
+✅ **Deleted:** ${deletedCount} events
+${deletedCount < eventCount ? `❌ **Failed:** ${eventCount - deletedCount} events\n` : ''}
+👤 **Executed by:** ${message.author.tag}
+
+⚠️ **All event data has been permanently deleted and reminders cancelled.**`);
+
+            console.log(`🗑️ Administrator ${message.author.tag} cleared ${deletedCount}/${eventCount} events`);
+
+        } catch (error) {
+            console.error('Error handling clearevents command:', error);
+            await message.reply('❌ An error occurred while clearing events.');
+        }
+    }
+
+    async handlePing(message) {
+        try {
+            const botRunId = this.bot.getRunId();
+            const uptime = Math.round(process.uptime());
+            const timestamp = new Date().toISOString();
+            
+            // Get some system info
+            const nodeVersion = process.version;
+            const memoryUsage = process.memoryUsage();
+            const memoryMB = Math.round(memoryUsage.rss / 1024 / 1024);
+            
+            await message.reply(`🏓 **Pong!**
+
+**Deployment Info:**
+🆔 **Run ID:** \`${botRunId}\` *(use this for !boton/!botoff)*
+🤖 **Bot ID:** \`${this.bot.getBotId()}\`
+⏰ **Started:** ${timestamp}
+⚡ **Uptime:** ${uptime}s
+💾 **Memory:** ${memoryMB}MB
+🟢 **Node.js:** ${nodeVersion}
+
+**Status:** Bot is running and responsive!`);
+
+            console.log(`🏓 Ping command executed by ${message.author.tag} - Run ID: ${botRunId}`);
+
+        } catch (error) {
+            console.error('Error handling ping command:', error);
+            await message.reply('❌ An error occurred while processing the ping command.');
         }
     }
 
@@ -563,7 +724,7 @@ The event has been permanently deleted and will no longer appear in event listin
 \`!voteinfo <vote_message_id>\` - Get detailed info about a specific vote
 
 **Event Information:**
-\`!events\` - View upcoming events (only works in regional/local channels)
+\`!events\` - View upcoming events (all regions here, area-specific in regional/local channels)
 
 **Community Information:**
 \`!moderators\` - View current server moderators
@@ -636,6 +797,102 @@ ${proposalInfo}
         }
 
         return chunks;
+    }
+
+    async handleBotOn(message, args) {
+        try {
+            const guild = message.guild;
+            const member = guild.members.cache.get(message.author.id);
+            
+            if (!member) {
+                await message.reply('❌ Could not find your membership in this server.');
+                return;
+            }
+
+            // Check if user is administrator (highest permission level)
+            if (!member.permissions.has('Administrator')) {
+                await message.reply('❌ This command is restricted to administrators only.');
+                console.log(`🚨 Non-admin ${message.author.tag} attempted to use !boton command`);
+                return;
+            }
+
+            // Validate run ID parameter
+            const runId = args.trim();
+            if (!runId) {
+                await message.reply('❌ Please provide a run ID. Usage: `!boton <run_id>`');
+                return;
+            }
+
+            // Validate run ID format (alphanumeric string)
+            if (!/^[a-zA-Z0-9\-_]+$/.test(runId) || runId.length < 3 || runId.length > 50) {
+                await message.reply('❌ Invalid run ID format. Please provide a valid run ID from Terraform.');
+                return;
+            }
+
+            // Enable the bot
+            this.bot.enableBot(runId);
+
+            await message.reply(`✅ **Bot Control Update**
+🤖 **Run ID:** \`${runId}\`
+🟢 **Status:** Enabled
+👤 **Administrator:** ${message.author.tag}
+
+The bot will now respond to all commands normally.`);
+
+            console.log(`✅ Administrator ${message.author.tag} enabled bot ${runId}`);
+
+        } catch (error) {
+            console.error('Error handling boton command:', error);
+            await message.reply('❌ An error occurred while enabling the bot.');
+        }
+    }
+
+    async handleBotOff(message, args) {
+        try {
+            const guild = message.guild;
+            const member = guild.members.cache.get(message.author.id);
+            
+            if (!member) {
+                await message.reply('❌ Could not find your membership in this server.');
+                return;
+            }
+
+            // Check if user is administrator (highest permission level)
+            if (!member.permissions.has('Administrator')) {
+                await message.reply('❌ This command is restricted to administrators only.');
+                console.log(`🚨 Non-admin ${message.author.tag} attempted to use !botoff command`);
+                return;
+            }
+
+            // Validate run ID parameter
+            const runId = args.trim();
+            if (!runId) {
+                await message.reply('❌ Please provide a run ID. Usage: `!botoff <run_id>`');
+                return;
+            }
+
+            // Validate run ID format (alphanumeric string)
+            if (!/^[a-zA-Z0-9\-_]+$/.test(runId) || runId.length < 3 || runId.length > 50) {
+                await message.reply('❌ Invalid run ID format. Please provide a valid run ID from Terraform.');
+                return;
+            }
+
+            // Disable the bot
+            this.bot.disableBot(runId);
+
+            await message.reply(`🔴 **Bot Control Update**
+🤖 **Run ID:** \`${runId}\`
+🔴 **Status:** Disabled
+👤 **Administrator:** ${message.author.tag}
+
+⚠️ The bot will ignore all commands except \`!boton\` and \`!botoff\` until re-enabled.`);
+
+            console.log(`🔴 Administrator ${message.author.tag} disabled bot ${runId}`);
+
+        } catch (error) {
+            console.error('Error handling botoff command:', error);
+            await message.reply('❌ An error occurred while disabling the bot.');
+        }
     }
 }
 

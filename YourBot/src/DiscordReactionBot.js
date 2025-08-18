@@ -38,6 +38,9 @@ class DiscordReactionBot {
         // Flag to prevent duplicate shutdown messages
         this.shutdownMessageSent = false;
         
+        // Bot enable/disable state tracking (Map of bot_id -> enabled status)
+        this.botStates = new Map();
+        
         // Initialize specialized modules - each handles a specific bot responsibility
         // This separation keeps concerns isolated and makes the code more maintainable
         this.configManager = new ConfigManager();        // S3-backed reaction configuration
@@ -143,14 +146,17 @@ class DiscordReactionBot {
                 
                 // Pre-cache messages to ensure reaction events work immediately
                 // Discord requires messages to be cached before reaction events fire reliably
+                console.log('🔄 Pre-caching reaction messages...');
                 await this.preCacheMessages(currentConfig);
+                console.log('✅ Message pre-caching completed');
             }
 
             // Pre-cache active vote messages to ensure voting continues properly
             // This is crucial for maintaining voting integrity across bot restarts
             if (activeVotes.length > 0) {
-                console.log('Pre-caching active vote messages...');
+                console.log('🔄 Pre-caching active vote messages...');
                 await this.preCacheVoteMessages(activeVotes);
+                console.log('✅ Vote message pre-caching completed');
             }
 
             // Post deployment confirmation message to moderator bot channel
@@ -200,16 +206,30 @@ class DiscordReactionBot {
             });
 
             process.on('SIGTERM', async () => {
-                console.log('Received SIGTERM, shutting down...');
+                console.log('🔄 Received SIGTERM, shutting down...');
                 await this.postShutdownMessage('Instance termination (SIGTERM)');
                 this.client.destroy();
                 process.exit(0);
             });
 
             // Consolidated ALB draining detection - all paths lead to this handler
+            let drainingHandled = false;
             const handleDraining = async (source) => {
+                const timestamp = new Date().toISOString();
+                console.log(`🔄 [${timestamp}] ALB draining signal received from ${source}`);
+                if (drainingHandled) {
+                    console.log(`🔄 ALB draining already handled, ignoring ${source} signal`);
+                    return;
+                }
+                drainingHandled = true;
                 console.log(`🔄 ALB draining detected from ${source}, sending shutdown message...`);
-                await this.postShutdownMessage('Instance draining (ALB health checks stopped)');
+                
+                try {
+                    await this.postShutdownMessage('Instance draining (ALB health checks stopped)');
+                    console.log(`✅ Shutdown message sent successfully from ${source}`);
+                } catch (error) {
+                    console.error(`❌ Failed to send shutdown message from ${source}:`, error);
+                }
                 // Don't destroy client yet, just send the message
             };
 
@@ -373,48 +393,108 @@ class DiscordReactionBot {
             return;
         }
         
-        console.log(`🔄 Sending shutdown message for: ${reason}`);
+        console.log(`🔄 Attempting to send shutdown message for: ${reason}`);
         
         try {
             // Set a timeout to ensure we don't block shutdown too long
+            let timeoutId;
             const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Shutdown message timeout')), 5000)
+                timeoutId = setTimeout(() => reject(new Error('Shutdown message timeout')), 5000)
             );
 
             const messagePromise = this.sendShutdownMessage(reason);
             
             // Race between sending message and timeout
-            await Promise.race([messagePromise, timeoutPromise]);
-            
-            // Only set flag after successful send
-            this.shutdownMessageSent = true;
+            try {
+                await Promise.race([messagePromise, timeoutPromise]);
+                // Only set flag after successful send
+                this.shutdownMessageSent = true;
+                console.log(`✅ Shutdown message sent successfully for: ${reason}`);
+            } finally {
+                // Always clear the timeout to prevent Jest hanging
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                }
+            }
             
         } catch (error) {
-            console.error('Error posting shutdown message:', error);
+            console.error(`❌ Error posting shutdown message for ${reason}:`, error);
+            // Don't set the flag if sending failed, so we can retry
             // Don't block shutdown even if message fails
         }
     }
 
     async sendShutdownMessage(reason) {
+        console.log(`🔄 sendShutdownMessage called with reason: ${reason}`);
+        
         const guild = this.client.guilds.cache.get(this.guildId);
         if (!guild) {
-            console.log('❌ Guild not found for shutdown message');
+            console.log(`❌ Guild not found for shutdown message. Guild ID: ${this.guildId}`);
             return;
         }
+        console.log(`✅ Found guild: ${guild.name} (${guild.id})`);
 
         const modBotChannel = guild.channels.cache.get(this.commandChannelId);
         if (!modBotChannel) {
             console.log(`❌ Moderator bot channel ${this.commandChannelId} not found`);
+            console.log(`❌ Available channels: ${guild.channels.cache.map(ch => `${ch.name}(${ch.id})`).join(', ')}`);
             return;
         }
+        console.log(`✅ Found moderator channel: ${modBotChannel.name} (${modBotChannel.id})`);
 
         const timestamp = new Date().toISOString();
         const uptime = Math.round(process.uptime());
         const shutdownMessage = `🔄 **Bot ${this.runId} Shutting Down** - ${reason}\n⏰ ${timestamp}\n⚡ Uptime: ${uptime}s`;
 
         console.log(`🔄 Attempting to send shutdown message: ${shutdownMessage.replace(/\n/g, ' | ')}`);
-        await modBotChannel.send(shutdownMessage);
-        console.log(`✅ Posted shutdown message to moderator bot channel`);
+        
+        try {
+            await modBotChannel.send(shutdownMessage);
+            console.log(`✅ Posted shutdown message to moderator bot channel successfully`);
+        } catch (error) {
+            console.error(`❌ Failed to send shutdown message to channel:`, error);
+            throw error; // Re-throw so the calling function knows it failed
+        }
+    }
+
+    /**
+     * Enable a bot by ID - allows the bot to respond to commands
+     */
+    enableBot(botId) {
+        this.botStates.set(botId, true);
+        console.log(`✅ Bot ${botId} enabled`);
+    }
+
+    /**
+     * Disable a bot by ID - bot will ignore all commands
+     */
+    disableBot(botId) {
+        this.botStates.set(botId, false);
+        console.log(`❌ Bot ${botId} disabled`);
+    }
+
+    /**
+     * Check if a bot is enabled (defaults to true if not set)
+     */
+    isBotEnabled(botId) {
+        return this.botStates.get(botId) !== false;
+    }
+
+    /**
+     * Check if this current bot instance is enabled
+     */
+    isThisBotEnabled() {
+        if (!this.client || !this.client.user) {
+            return true; // Default to enabled if client not ready
+        }
+        return this.isBotEnabled(this.client.user.id);
+    }
+
+    /**
+     * Get the current bot's ID
+     */
+    getBotId() {
+        return this.client?.user?.id || null;
     }
 
 }

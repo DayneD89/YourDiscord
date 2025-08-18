@@ -24,8 +24,10 @@ const server = http.createServer((req, res) => {
     const isReady = fs.existsSync(healthFile);
     const isDraining = fs.existsSync(drainingFile);
     
-    // Add detailed logging for health check responses
-    console.log(`🏥 Health check: ready=${isReady}, draining=${isDraining}, responding=${isReady && !isDraining ? 200 : 503}`);
+    // Only log non-200 responses to reduce noise
+    if (!isReady || isDraining) {
+      console.log(`🏥 Health check: ready=${isReady}, draining=${isDraining}, responding=503`);
+    }
     
     if (isReady && !isDraining) {
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -63,21 +65,22 @@ setInterval(() => {
   const botReady = fs.existsSync(healthFile);
   const alreadyDraining = fs.existsSync(drainingFile);
   
-  if (timeSinceLastCheck > 10000) { // Log if no health check for more than 10s
+  // Only log when something important is happening
+  if (timeSinceLastCheck > 10000 && (timeSinceLastCheck > 15000 || !botReady || alreadyDraining)) {
     console.log(`🔍 Health check status: ready=${botReady}, draining=${alreadyDraining}, lastCheck=${Math.floor(timeSinceLastCheck/1000)}s ago`);
   }
   
-  // If bot is ready but we haven't had a health check in 20 seconds, ALB might be draining us
-  // (ALB checks every 15s, so missing 1+ checks = 20s = likely draining)
-  if (botReady && !alreadyDraining && timeSinceLastCheck > 20000 && !drainingMessageSent) {
-    console.log("🔄 No health checks for 20s, likely ALB draining. Triggering early shutdown message...");
+  // If bot is ready but we haven't had a health check in 15 seconds, ALB might be draining us
+  // (ALB checks every 5s, so missing 3+ checks = 15s = likely draining)
+  if (botReady && !alreadyDraining && timeSinceLastCheck > 15000 && !drainingMessageSent) {
+    console.log("🔄 No health checks for 15s, likely ALB draining. Triggering early shutdown message...");
     drainingMessageSent = true;
     
     // Create draining file
     fs.writeFileSync(drainingFile, JSON.stringify({
       draining: true,
       timestamp: new Date().toISOString(),
-      reason: "No health checks for 30 seconds"
+      reason: "No health checks for 15 seconds"
     }));
     
     // Signal main bot process to send shutdown message
@@ -120,8 +123,21 @@ setInterval(() => {
       if (botPid) {
         const pid = parseInt(botPid.split('\n')[0]); // Take first PID if multiple
         console.log(`📡 Sending SIGUSR1 to bot process ${pid}...`);
-        process.kill(pid, "SIGUSR1");
-        console.log(`✅ Sent SIGUSR1 to main bot process ${pid}`);
+        
+        try {
+          process.kill(pid, "SIGUSR1");
+          console.log(`✅ Sent SIGUSR1 to main bot process ${pid}`);
+          
+          // Also create a marker file to track that we sent the signal
+          fs.writeFileSync("/tmp/sigusr1-sent", JSON.stringify({
+            timestamp: new Date().toISOString(),
+            pid: pid,
+            reason: "ALB draining detected"
+          }));
+          
+        } catch (error) {
+          console.error(`❌ Failed to send SIGUSR1 to process ${pid}:`, error);
+        }
         
         // Verify the process still exists after sending signal
         setTimeout(() => {
@@ -153,10 +169,14 @@ server.listen(3000, "0.0.0.0", () => {
   console.log("✅ Health check server running on port 3000");
   console.log(`🔍 Initial file check: /tmp/bot-ready exists = ${fs.existsSync("/tmp/bot-ready")}`);
   
-  // Log server activity periodically
+  // Log server activity less frequently and only when needed
   setInterval(() => {
-    console.log(`🔄 Health server alive, uptime: ${Math.floor(process.uptime())}s, last check: ${Math.floor((Date.now() - lastHealthCheck)/1000)}s ago`);
-  }, 30000); // Every 30 seconds
+    const timeSinceLastCheck = Math.floor((Date.now() - lastHealthCheck)/1000);
+    // Only log if we haven't had checks recently or at startup
+    if (timeSinceLastCheck > 20 || process.uptime() < 120) {
+      console.log(`🔄 Health server alive, uptime: ${Math.floor(process.uptime())}s, last check: ${timeSinceLastCheck}s ago`);
+    }
+  }, 60000); // Every 60 seconds
 });
 
 server.on('error', (error) => {

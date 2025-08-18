@@ -195,6 +195,17 @@ class EventHandlers {
             return;
         }
 
+        // Check if this bot is enabled - if disabled, ignore all commands except boton/botoff
+        if (!this.bot.isThisBotEnabled()) {
+            // Allow boton and botoff commands even when bot is disabled (admin override)
+            if (message.content.startsWith('!boton ') || message.content.startsWith('!botoff ')) {
+                console.log('Bot is disabled, but processing admin bot control command');
+            } else {
+                console.log('Bot is disabled, ignoring all commands');
+                return;
+            }
+        }
+
         // Only process messages that start with command prefix
         // This prevents the bot from responding to normal conversation
         if (!message.content.startsWith('!')) {
@@ -213,11 +224,17 @@ class EventHandlers {
             return;
         }
 
-        // Handle !events command in regional/local channels specially
-        if (isEventsCommand && isRegionalOrLocalChannel) {
-            console.log(`Processing !events command from ${message.author.tag} in ${message.channel.name}`);
-            await this.handleEventsCommand(message);
-            return;
+        // Handle !events command specially based on channel type
+        if (isEventsCommand) {
+            if (isRegionalOrLocalChannel) {
+                console.log(`Processing !events command from ${message.author.tag} in regional/local channel ${message.channel.name}`);
+                await this.handleEventsCommand(message);
+                return;
+            } else if (isModeratorChannel || isMemberChannel) {
+                console.log(`Processing !events command from ${message.author.tag} in bot channel`);
+                await this.handleAllEventsCommand(message);
+                return;
+            }
         }
 
         console.log(`Processing command from ${message.author.tag}: "${message.content}" in ${isModeratorChannel ? 'moderator' : 'member'} channel`);
@@ -302,13 +319,7 @@ class EventHandlers {
                 if (event.link) {
                     eventsDisplay += `   🔗 <${event.link}>\n`;
                 }
-                eventsDisplay += `   👤 <@${event.created_by}>\n`;
-                
-                // Show event ID to moderators only
-                if (isModerator) {
-                    eventsDisplay += `   🆔 \`${event.event_id}\`\n`;
-                }
-                eventsDisplay += `\n`;
+                eventsDisplay += `   👤 <@${event.created_by}>\n\n`;
             });
 
             eventsDisplay += `💡 **Want to add an event?** Ask a moderator to use \`!addevent\` in their bot channel!`;
@@ -317,6 +328,77 @@ class EventHandlers {
 
         } catch (error) {
             console.error('Error handling !events command:', error);
+            await message.reply('❌ An error occurred while fetching events.');
+        }
+    }
+
+    /**
+     * Handle !events command in bot channels - shows next 3 events from all regions
+     */
+    async handleAllEventsCommand(message) {
+        try {
+            // Check if user has member role
+            const guild = message.guild;
+            const member = guild.members.cache.get(message.author.id);
+            
+            if (!member) {
+                await message.reply('❌ Could not find your membership in this server.');
+                return;
+            }
+
+            const isMember = this.bot.getUserValidator().hasRole(member, this.bot.getMemberRoleId());
+            if (!isMember) {
+                await message.reply('❌ You need the member role to use this command.');
+                return;
+            }
+
+            // Get all upcoming events from all regions (limit 50 to avoid performance issues)
+            const allEvents = await this.bot.getEventManager().storage.getUpcomingEvents(guild.id, 50);
+            
+            console.log(`🔍 Found ${allEvents.length} total upcoming events across all regions`);
+
+            if (allEvents.length === 0) {
+                await message.reply(`📅 **No upcoming events found across all regions**\n\nCheck back later or ask moderators to add events with \`!addevent\`!`);
+                return;
+            }
+
+            // Sort by event date and take the next 3
+            const sortedEvents = allEvents.sort((a, b) => new Date(a.event_date) - new Date(b.event_date));
+            const nextThreeEvents = sortedEvents.slice(0, 3);
+
+            // Format events list
+            let eventsDisplay = `📅 **Next ${nextThreeEvents.length} Upcoming Events (All Regions):**\n\n`;
+            
+            nextThreeEvents.forEach((event, index) => {
+                const eventDate = new Date(event.event_date);
+                const formattedDate = eventDate.toLocaleDateString('en-GB', {
+                    weekday: 'short',
+                    month: 'short', 
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+
+                const timeUntil = this.getTimeUntilEvent(eventDate);
+                
+                eventsDisplay += `**${index + 1}.** 🎉 **${event.name}**\n`;
+                eventsDisplay += `   📅 ${formattedDate} (${timeUntil})\n`;
+                eventsDisplay += `   📍 ${event.region}${event.location ? ` → ${event.location}` : ''}\n`;
+                if (event.link) {
+                    eventsDisplay += `   🔗 <${event.link}>\n`;
+                }
+                eventsDisplay += `   👤 <@${event.created_by}>\n\n`;
+            });
+
+            if (allEvents.length > 3) {
+                eventsDisplay += `💡 **${allEvents.length - 3} more events available** - check regional channels for area-specific events!\n`;
+            }
+            eventsDisplay += `\n🏘️ **Want area-specific events?** Use \`!events\` in regional/local channels!`;
+
+            await message.reply(eventsDisplay);
+
+        } catch (error) {
+            console.error('Error handling !events command in bot channel:', error);
             await message.reply('❌ An error occurred while fetching events.');
         }
     }

@@ -344,10 +344,10 @@ resource "aws_lb_target_group" "bot_health" {
 
   health_check {
     enabled             = true
-    healthy_threshold   = 2  # Consider healthy after 2 successful checks
-    unhealthy_threshold = 2  # Consider unhealthy after 2 failed checks (faster detection)
-    timeout             = 5  # 5 second timeout per check (faster failure detection)
-    interval            = 15 # Check every 15 seconds
+    healthy_threshold   = 3  # Consider healthy after 3 successful checks (15s total)
+    unhealthy_threshold = 3  # Consider unhealthy after 3 failed checks (prevent flapping)
+    timeout             = 3  # 3 second timeout per check 
+    interval            = 5  # Check every 5 seconds (much faster detection)
     path                = "/health"
     matcher             = "200"
     protocol            = "HTTP"
@@ -380,7 +380,7 @@ resource "aws_autoscaling_group" "bot" {
   name                      = "${local.name}-asg"
   vpc_zone_identifier       = [local.selected_subnet_id]
   health_check_type         = "ELB" # Use ELB health checks for proper bot readiness detection
-  health_check_grace_period = 90    # 1.5 minutes for bot to start and report ready
+  health_check_grace_period = 120   # 2 minutes for bot to start and report ready
   target_group_arns         = [aws_lb_target_group.bot_health.arn]
 
   min_size         = 1
@@ -399,9 +399,11 @@ resource "aws_autoscaling_group" "bot" {
   instance_refresh {
     strategy = "Rolling"
     preferences {
-      min_healthy_percentage = 50
-      instance_warmup        = 90  # 1.5 minutes for bot to start and report ready
-      checkpoint_delay       = 30  # 30 second delay before terminating old instance
+      min_healthy_percentage = 100  # Always keep at least one healthy instance
+      max_healthy_percentage = 200  # Allow up to 2 instances during deployment
+      instance_warmup        = 120  # 2 minutes for bot to start and report ready 
+      checkpoint_delay       = 45   # 45 second delay before terminating old instance
+      scale_in_protected_instances = "Ignore"  # Don't let scale-in protection interfere
     }
     triggers = ["tag"]
   }

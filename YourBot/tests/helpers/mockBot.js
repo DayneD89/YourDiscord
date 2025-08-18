@@ -62,6 +62,13 @@ class MockBot {
     };
   }
   getEventsTable() { return 'discord-events-test'; }
+  
+  // Bot state management methods
+  isThisBotEnabled() { return true; }
+  isBotEnabled(botId) { return true; }
+  enableBot(botId) { }
+  disableBot(botId) { }
+  getBotId() { return 'test-bot-123'; }
 }
 
 module.exports = MockBot;

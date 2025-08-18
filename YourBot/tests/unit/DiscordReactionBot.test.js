@@ -709,7 +709,7 @@ describe('DiscordReactionBot', () => {
       await bot.postShutdownMessage('Timeout test');
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Error posting shutdown message:'),
+        expect.stringContaining('Error posting shutdown message for'),
         expect.any(Error)
       );
       consoleSpy.mockRestore();
@@ -735,6 +735,23 @@ describe('DiscordReactionBot', () => {
 
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining('Moderator bot channel')
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle channel send errors', async () => {
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      
+      // Ensure proper mock setup
+      bot.shutdownMessageSent = false; // Reset state
+      mockChannel.send.mockRejectedValue(new Error('Channel send failed'));
+
+      // Method should not throw - it catches and logs errors instead
+      await expect(bot.postShutdownMessage('Error test')).resolves.not.toThrow();
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Error posting shutdown message for Error test'),
+        expect.any(Error)
       );
       consoleSpy.mockRestore();
     });
@@ -765,6 +782,92 @@ describe('DiscordReactionBot', () => {
 
       emitSpy.mockRestore();
       consoleSpy.mockRestore();
+    });
+  });
+
+  describe('bot state management', () => {
+    beforeEach(() => {
+      bot.client = { user: { id: 'bot123' } };
+    });
+
+    describe('enableBot', () => {
+      it('should enable bot and log success', () => {
+        const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+        
+        bot.enableBot('bot456');
+        
+        expect(bot.botStates.get('bot456')).toBe(true);
+        expect(consoleSpy).toHaveBeenCalledWith('✅ Bot bot456 enabled');
+        
+        consoleSpy.mockRestore();
+      });
+    });
+
+    describe('disableBot', () => {
+      it('should disable bot and log success', () => {
+        const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+        
+        bot.disableBot('bot456');
+        
+        expect(bot.botStates.get('bot456')).toBe(false);
+        expect(consoleSpy).toHaveBeenCalledWith('❌ Bot bot456 disabled');
+        
+        consoleSpy.mockRestore();
+      });
+    });
+
+    describe('isBotEnabled', () => {
+      it('should return true for enabled bot', () => {
+        bot.enableBot('bot456');
+        expect(bot.isBotEnabled('bot456')).toBe(true);
+      });
+
+      it('should return false for disabled bot', () => {
+        bot.disableBot('bot456');
+        expect(bot.isBotEnabled('bot456')).toBe(false);
+      });
+
+      it('should return true for unknown bot (default enabled)', () => {
+        expect(bot.isBotEnabled('unknown-bot')).toBe(true);
+      });
+    });
+
+    describe('isThisBotEnabled', () => {
+      it('should return enabled status for current bot', () => {
+        bot.enableBot('bot123');
+        expect(bot.isThisBotEnabled()).toBe(true);
+      });
+
+      it('should return disabled status for current bot', () => {
+        bot.disableBot('bot123');
+        expect(bot.isThisBotEnabled()).toBe(false);
+      });
+
+      it('should return true when client user not ready', () => {
+        bot.client = { user: null };
+        expect(bot.isThisBotEnabled()).toBe(true);
+      });
+
+      it('should return true when client not ready', () => {
+        bot.client = null;
+        expect(bot.isThisBotEnabled()).toBe(true);
+      });
+    });
+
+    describe('getBotId', () => {
+      it('should return current bot ID when ready', () => {
+        expect(bot.getBotId()).toBe('bot123');
+      });
+
+      it('should return null when client user not ready', () => {
+        bot.client = { user: null };
+        expect(bot.getBotId()).toBe(null);
+      });
+
+      it('should return null when client not ready', () => {
+        bot.client = null;
+        expect(bot.getBotId()).toBe(null);
+      });
     });
   });
 });

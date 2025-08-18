@@ -14,8 +14,15 @@ class EventManager {
             throw new Error('Reminder intervals not configured in bot');
         }
         
-        // Start reminder checker (runs every hour)
-        this.startReminderChecker();
+        // Timer references for cleanup
+        this.reminderTimer = null;
+        this.initialCheckTimer = null;
+        this.nextReminderTimeout = null;
+        
+        // Start reminder checker (runs every hour) - skip only during Jest testing
+        if (!process.env.JEST_WORKER_ID) {
+            this.startReminderChecker();
+        }
         
         console.log(`EventManager initialized with intervals: ${this.reminderIntervals.weekReminder/60000}min, ${this.reminderIntervals.dayReminder/60000}min`);
     }
@@ -49,14 +56,22 @@ class EventManager {
                 locationRole = this.findRoleByName(guild, eventData.location);
             }
 
-            // Create event in database
-            const event = await this.storage.createEvent(guildId, {
+            // Convert date to ISO string for consistent storage (assuming British time)
+            const eventDate = new Date(eventData.eventDate);
+            const eventDataWithISODate = {
                 ...eventData,
+                eventDate: eventDate.toISOString(),
                 createdBy: createdBy.id
-            });
+            };
+
+            // Create event in database
+            const event = await this.storage.createEvent(guildId, eventDataWithISODate);
 
             // Send notification to region and location channels
             await this.sendEventNotification(guild, event, regionRole, locationRole);
+
+            // Reschedule reminders to include this new event
+            this.rescheduleReminders();
 
             return event;
 
@@ -218,117 +233,169 @@ class EventManager {
     }
 
     /**
-     * Start the reminder checker system
+     * Start the dynamic reminder system - schedules next reminder precisely
      */
     startReminderChecker() {
-        // Check frequency based on environment - more frequent in dev for testing
-        const isDevMode = this.reminderIntervals.weekReminder < 0; // Negative means dev mode
-        const checkInterval = isDevMode ? 30 * 1000 : 60 * 60 * 1000; // 30 seconds in dev, 1 hour in prod
+        console.log('Starting dynamic reminder system...');
         
-        console.log(`Starting reminder checker - checking every ${checkInterval/1000}s (${isDevMode ? 'dev' : 'prod'} mode)`);
-        
-        setInterval(() => {
-            this.checkReminders();
-        }, checkInterval);
-
         // Initial check on startup  
-        setTimeout(() => {
-            this.checkReminders();
-        }, isDevMode ? 10000 : 30000); // 10 seconds in dev, 30 seconds in prod
+        this.initialCheckTimer = setTimeout(() => {
+            this.scheduleNextReminder();
+        }, 10000); // 10 seconds startup delay
 
-        console.log('Reminder checker started');
+        console.log('Dynamic reminder system started');
     }
 
     /**
-     * Check for events that need reminders
+     * Schedule the next reminder based on actual event timing
      */
-    async checkReminders() {
+    async scheduleNextReminder() {
         try {
             const guildId = this.bot.getGuildId();
             const upcomingEvents = await this.storage.getUpcomingEvents(guildId);
 
+            if (upcomingEvents.length === 0) {
+                console.log('🔔 No upcoming events - scheduling check in 1 hour');
+                this.nextReminderTimeout = setTimeout(() => this.scheduleNextReminder(), 60 * 60 * 1000);
+                return;
+            }
+
+            let nextReminderTime = null;
+            let targetEvent = null;
+
+            // Find the next reminder that needs to be sent
             for (const event of upcomingEvents) {
-                await this.processEventReminder(event);
+                const eventDate = new Date(event.event_date);
+                const createdDate = new Date(event.created_at);
+                const now = new Date();
+
+                // Check when this event's reminders should be sent
+                const weekReminderTime = new Date(eventDate.getTime() - this.reminderIntervals.weekReminder);
+                const dayReminderTime = new Date(eventDate.getTime() - this.reminderIntervals.dayReminder);
+
+                if (event.reminder_status === 'pending' && now >= weekReminderTime) {
+                    // Week reminder is due now
+                    nextReminderTime = now;
+                    targetEvent = event;
+                    break;
+                } else if (event.reminder_status === 'week_sent' && now >= dayReminderTime) {
+                    // Day reminder is due now
+                    nextReminderTime = now;
+                    targetEvent = event;
+                    break;
+                } else if (event.reminder_status === 'pending' && weekReminderTime > now) {
+                    // Week reminder is due in the future
+                    if (!nextReminderTime || weekReminderTime < nextReminderTime) {
+                        nextReminderTime = weekReminderTime;
+                        targetEvent = event;
+                    }
+                } else if (event.reminder_status === 'week_sent' && dayReminderTime > now) {
+                    // Day reminder is due in the future
+                    if (!nextReminderTime || dayReminderTime < nextReminderTime) {
+                        nextReminderTime = dayReminderTime;
+                        targetEvent = event;
+                    }
+                }
+            }
+
+            if (nextReminderTime && targetEvent) {
+                const msUntilReminder = Math.max(0, nextReminderTime.getTime() - Date.now());
+                
+                if (msUntilReminder === 0) {
+                    // Send reminder now and reschedule
+                    console.log(`🔔 Sending immediate reminder for: ${targetEvent.name}`);
+                    await this.processEventReminder(targetEvent);
+                    this.scheduleNextReminder(); // Reschedule immediately
+                } else {
+                    // Schedule reminder for exact time
+                    console.log(`🔔 Next reminder scheduled in ${Math.round(msUntilReminder/1000)}s for: ${targetEvent.name}`);
+                    this.nextReminderTimeout = setTimeout(() => {
+                        this.processEventReminder(targetEvent).then(() => {
+                            this.scheduleNextReminder(); // Reschedule after sending
+                        });
+                    }, msUntilReminder);
+                }
+            } else {
+                // No upcoming reminders, check again in 1 hour
+                console.log('🔔 No upcoming reminders - checking again in 1 hour');
+                this.nextReminderTimeout = setTimeout(() => this.scheduleNextReminder(), 60 * 60 * 1000);
             }
 
         } catch (error) {
-            console.error('Error checking reminders:', error);
+            console.error('Error scheduling next reminder:', error);
+            // Fallback to checking again in 5 minutes
+            this.nextReminderTimeout = setTimeout(() => this.scheduleNextReminder(), 5 * 60 * 1000);
         }
     }
 
     /**
-     * Process reminder for a specific event
+     * Cleanup timers - call this during shutdown or in tests
+     */
+    cleanup() {
+        if (this.reminderTimer) {
+            clearInterval(this.reminderTimer);
+            this.reminderTimer = null;
+        }
+        if (this.initialCheckTimer) {
+            clearTimeout(this.initialCheckTimer);
+            this.initialCheckTimer = null;
+        }
+        if (this.nextReminderTimeout) {
+            clearTimeout(this.nextReminderTimeout);
+            this.nextReminderTimeout = null;
+        }
+        console.log('EventManager timers cleaned up');
+    }
+
+    /**
+     * Reschedule reminders after new events are added
+     */
+    rescheduleReminders() {
+        // Cancel current schedule and recalculate
+        if (this.nextReminderTimeout) {
+            clearTimeout(this.nextReminderTimeout);
+            this.nextReminderTimeout = null;
+        }
+        
+        // Schedule immediately
+        setImmediate(() => this.scheduleNextReminder());
+    }
+
+
+    /**
+     * Process reminder for a specific event (called by dynamic scheduler)
      */
     async processEventReminder(event) {
         try {
             const now = new Date();
             const eventDate = new Date(event.event_date);
-            const createdDate = new Date(event.created_at);
-            const timeSinceCreation = now.getTime() - createdDate.getTime();
             const timeUntilEvent = eventDate.getTime() - now.getTime();
 
-            let shouldSendReminder = false;
             let reminderType = '';
             let newStatus = event.reminder_status;
-
-            // Check if we're using "after creation" reminders (negative intervals) or "before event" reminders (positive)
-            const isAfterCreationMode = this.reminderIntervals.weekReminder < 0;
-
-            // Debug logging for troubleshooting
-            console.log(`🔍 Reminder check for event ${event.name}:`);
-            console.log(`  - Event date: ${eventDate.toISOString()}`);
-            console.log(`  - Time until event: ${Math.floor(timeUntilEvent / (60 * 1000))} minutes`);
-            console.log(`  - Time since creation: ${Math.floor(timeSinceCreation / (60 * 1000))} minutes`);
-            console.log(`  - Current status: ${event.reminder_status}`);
-            console.log(`  - Mode: ${isAfterCreationMode ? 'After creation' : 'Before event'}`);
-            console.log(`  - Week reminder interval: ${this.reminderIntervals.weekReminder}ms`);
-            console.log(`  - Day reminder interval: ${this.reminderIntervals.dayReminder}ms`);
-
             let reminderIntervalMs = 0;
 
-            if (isAfterCreationMode) {
-                // Development mode: Send reminders X minutes AFTER event creation
-                const weekReminderTime = Math.abs(this.reminderIntervals.weekReminder);  // 2 minutes
-                const dayReminderTime = Math.abs(this.reminderIntervals.dayReminder);    // 1 minute
-                
-                // First reminder: X minutes after creation
-                if (timeSinceCreation >= weekReminderTime && event.reminder_status === 'pending') {
-                    shouldSendReminder = true;
-                    reminderType = 'first';
-                    reminderIntervalMs = this.reminderIntervals.weekReminder; // Keep negative for after-creation formatting
-                    newStatus = 'week_sent';
-                }
-                // Second reminder: X minutes after first reminder 
-                else if (timeSinceCreation >= (weekReminderTime + dayReminderTime) && event.reminder_status === 'week_sent') {
-                    shouldSendReminder = true;
-                    reminderType = 'second';
-                    reminderIntervalMs = this.reminderIntervals.dayReminder; // Keep negative for after-creation formatting  
-                    newStatus = 'day_sent';
-                }
+            // Determine which reminder to send based on current status
+            if (event.reminder_status === 'pending') {
+                // Send first reminder
+                reminderType = 'first';
+                reminderIntervalMs = this.reminderIntervals.weekReminder;
+                newStatus = 'week_sent';
+            } else if (event.reminder_status === 'week_sent') {
+                // Send second reminder
+                reminderType = 'second';
+                reminderIntervalMs = this.reminderIntervals.dayReminder;
+                newStatus = 'day_sent';
             } else {
-                // Production mode: Send reminders X time BEFORE event date
-                // Week reminder: Send when time remaining is less than or equal to week reminder threshold
-                if (timeUntilEvent <= this.reminderIntervals.weekReminder && timeUntilEvent > this.reminderIntervals.dayReminder && event.reminder_status === 'pending') {
-                    shouldSendReminder = true;
-                    reminderType = 'first';
-                    reminderIntervalMs = this.reminderIntervals.weekReminder;
-                    newStatus = 'week_sent';
-                }
-                // Day reminder: Send when time remaining is less than or equal to day reminder threshold
-                else if (timeUntilEvent <= this.reminderIntervals.dayReminder && timeUntilEvent > 0 && event.reminder_status === 'week_sent') {
-                    shouldSendReminder = true;
-                    reminderType = 'second';
-                    reminderIntervalMs = this.reminderIntervals.dayReminder;
-                    newStatus = 'day_sent';
-                }
+                // Already sent all reminders
+                return;
             }
 
-            if (shouldSendReminder) {
-                const reminderText = this.formatIntervalTime(reminderIntervalMs, isAfterCreationMode);
-                console.log(`📅 Sending ${reminderType} reminder (${reminderText}) for event: ${event.name}`);
-                await this.sendEventReminder(event, reminderType, reminderIntervalMs, isAfterCreationMode);
-                await this.storage.updateReminderStatus(event.guild_id, event.event_id, newStatus);
-            }
+            const reminderText = this.formatIntervalTime(reminderIntervalMs, false);
+            console.log(`📅 Sending ${reminderType} reminder (${reminderText}) for event: ${event.name}`);
+            
+            await this.sendEventReminder(event, reminderType, reminderIntervalMs, false);
+            await this.storage.updateReminderStatus(event.guild_id, event.event_id, newStatus);
 
         } catch (error) {
             console.error(`Error processing reminder for event ${event.event_id}:`, error);

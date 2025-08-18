@@ -129,12 +129,12 @@ locals {
   
   # Environment-specific event reminder intervals
   # Production: 7 days and 24 hours before events
-  # Development: 2 minutes and 1 minute after event creation (for fast testing)
+  # Development: 5 minutes and 2 minutes before event (for fast testing)
   reminder_intervals = var.env == "main" ? {
     weekReminder = 7 * 24 * 60 * 60 * 1000    # 7 days in milliseconds
     dayReminder = 24 * 60 * 60 * 1000          # 24 hours in milliseconds
   } : {
-    weekReminder = -2 * 60 * 1000              # 2 minutes after creation (negative = after)
-    dayReminder = -1 * 60 * 1000               # 1 minute after creation (negative = after)
+    weekReminder = 5 * 60 * 1000               # 5 minutes before event
+    dayReminder = 2 * 60 * 1000                # 2 minutes before event
   }
 }

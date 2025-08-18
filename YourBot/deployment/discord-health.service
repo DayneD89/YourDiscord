@@ -6,12 +6,10 @@ After=network.target
 Type=simple
 User=ec2-user
 WorkingDirectory=/opt/discord-bot
-ExecStart=/usr/bin/node health-check.js
+ExecStart=/bin/bash -c 'mkdir -p /var/log/discord-bot && /usr/bin/node health-check.js >> /var/log/discord-bot/health.log 2>&1'
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
-StandardOutput=journal
-StandardError=journal
 SyslogIdentifier=discord-health
 
 [Install]

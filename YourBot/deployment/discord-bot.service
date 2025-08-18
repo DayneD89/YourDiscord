@@ -7,13 +7,11 @@ Requires=discord-health.service
 Type=simple
 User=ec2-user
 WorkingDirectory=/opt/discord-bot
-ExecStart=/usr/bin/node bot-enhanced.js
+ExecStart=/bin/bash -c 'mkdir -p /var/log/discord-bot && /usr/bin/node bot-enhanced.js >> /var/log/discord-bot/bot.log 2>&1'
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
 Environment=AWS_REGION=us-west-2
-StandardOutput=journal
-StandardError=journal
 SyslogIdentifier=discord-bot
 
 # Health check configuration

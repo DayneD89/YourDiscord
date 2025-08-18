@@ -139,6 +139,20 @@ describe('CommandHandler', () => {
       expect(commandHandler.handleAddEvent).toHaveBeenCalledWith(mockMessage, '<@&123456789012345670> <@&123456789012345671> "Event" | 2025-08-25 18:00 | https://link.com');
     });
 
+    it('should handle !removeevent command', async () => {
+      jest.spyOn(commandHandler, 'handleRemoveEvent').mockResolvedValue();
+      await commandHandler.handleModeratorCommand(mockMessage, mockMember, '!removeevent @London @Central "Event" | 2025-08-25 18:00', true);
+
+      expect(commandHandler.handleRemoveEvent).toHaveBeenCalledWith(mockMessage, '@London @Central "Event" | 2025-08-25 18:00');
+    });
+
+    it('should handle !ping command', async () => {
+      jest.spyOn(commandHandler, 'handlePing').mockResolvedValue();
+      await commandHandler.handleModeratorCommand(mockMessage, mockMember, '!ping', true);
+
+      expect(commandHandler.handlePing).toHaveBeenCalledWith(mockMessage);
+    });
+
     it('should handle unknown command', async () => {
       await commandHandler.handleModeratorCommand(mockMessage, mockMember, '!unknown', true);
 
@@ -594,6 +608,106 @@ describe('CommandHandler', () => {
     });
   });
 
+  describe('handleRemoveEvent', () => {
+    beforeEach(() => {
+      // Mock bot getEventManager
+      mockBot.getEventManager = jest.fn(() => ({
+        storage: {
+          getAllEvents: jest.fn(),
+          deleteEvent: jest.fn()
+        }
+      }));
+      mockBot.getGuildId = jest.fn(() => 'guild123');
+      
+      mockMessage.guild = {
+        id: 'guild123',
+        roles: {
+          cache: new Map([
+            ['123456789012345670', { id: '123456789012345670', name: 'London' }],
+            ['123456789012345671', { id: '123456789012345671', name: 'Central London' }]
+          ])
+        }
+      };
+
+      // Mock message.mentions.roles
+      mockMessage.mentions = {
+        roles: new Map([
+          ['123456789012345670', { id: '123456789012345670', name: 'London' }],
+          ['123456789012345671', { id: '123456789012345671', name: 'Central London' }]
+        ])
+      };
+    });
+
+    it('should handle empty event args', async () => {
+      await commandHandler.handleRemoveEvent(mockMessage, '');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Event remove command format:'));
+    });
+
+    it('should handle invalid format (missing pipes)', async () => {
+      await commandHandler.handleRemoveEvent(mockMessage, 'invalid format');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Invalid format.'));
+    });
+
+    it('should handle missing role mentions', async () => {
+      await commandHandler.handleRemoveEvent(mockMessage, 'No roles "Event" | 2025-08-25 18:00');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Missing role mentions'));
+    });
+
+    it('should handle invalid date format', async () => {
+      await commandHandler.handleRemoveEvent(mockMessage, '<@&123456789012345670> "Event" | invalid-date');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Invalid date format'));
+    });
+
+    it('should handle non-existent roles', async () => {
+      // Mock message.mentions to not have the invalid role
+      mockMessage.mentions = {
+        roles: new Map() // Empty map means no roles found
+      };
+      
+      await commandHandler.handleRemoveEvent(mockMessage, '<@&999999999999999999> "Event" | 2025-08-25 18:00');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Invalid role mentions'));
+    });
+
+    it('should handle storage errors gracefully in main flow', async () => {
+      const mockEventManager = mockBot.getEventManager();
+      mockEventManager.storage.getAllEvents.mockRejectedValue(new Error('Storage error'));
+
+      await commandHandler.handleRemoveEvent(mockMessage, '<@&123456789012345670> "Test Event" | 2025-08-25 18:00');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('An error occurred while removing the event'));
+    });
+
+    it('should handle event deletion error', async () => {
+      const mockEvent = {
+        event_id: 'event123',
+        name: 'Test Event',
+        region: 'London',
+        event_date: '2025-08-25T17:00:00.000Z'
+      };
+      const mockEventManager = mockBot.getEventManager();
+      mockEventManager.storage.getAllEvents.mockResolvedValue({ events: [mockEvent] });
+      mockEventManager.storage.deleteEvent.mockRejectedValue(new Error('Deletion failed'));
+
+      await commandHandler.handleRemoveEvent(mockMessage, '<@&123456789012345670> "Test Event" | 2025-08-25 18:00');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('An error occurred while removing the event'));
+    });
+
+    it('should handle errors gracefully', async () => {
+      const mockEventManager = mockBot.getEventManager();
+      mockEventManager.storage.getAllEvents.mockRejectedValue(new Error('Database error'));
+
+      await commandHandler.handleRemoveEvent(mockMessage, '<@&123456789012345670> "Test Event" | 2025-08-25 18:00');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('An error occurred while removing the event'));
+    });
+  });
+
   describe('handleForceVote', () => {
     beforeEach(() => {
       mockBot.proposalManager = {
@@ -764,6 +878,342 @@ describe('CommandHandler', () => {
         
         expect(chunks).toEqual([]);
       });
+    });
+  });
+
+  describe('handleClearEvents', () => {
+    let mockEventManager;
+
+    beforeEach(() => {
+      mockEventManager = {
+        storage: {
+          getAllEvents: jest.fn(),
+          deleteEvent: jest.fn()
+        }
+      };
+      mockBot.getEventManager = jest.fn(() => mockEventManager);
+      mockBot.getGuildId = jest.fn(() => 'guild123');
+      
+      // Setup mock member with admin permissions
+      mockMember.permissions = {
+        has: jest.fn()
+      };
+    });
+
+    it('should reject non-administrator users', async () => {
+      mockMember.permissions.has.mockReturnValue(false);
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      
+      await commandHandler.handleClearEvents(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ This command is restricted to administrators only.');
+      expect(consoleSpy).toHaveBeenCalledWith(
+        `🚨 Non-admin ${mockMessage.author.tag} attempted to use !clearevents command`
+      );
+      
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle member not found in guild', async () => {
+      mockGuild.members.cache.clear();
+      
+      await commandHandler.handleClearEvents(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ Could not find your membership in this server.');
+    });
+
+    it('should handle no events to clear', async () => {
+      mockMember.permissions.has.mockReturnValue(true);
+      mockEventManager.storage.getAllEvents.mockResolvedValue({
+        events: []
+      });
+      
+      await commandHandler.handleClearEvents(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('📅 **No events found** - event list is already empty.');
+    });
+
+    it('should successfully clear all events', async () => {
+      mockMember.permissions.has.mockReturnValue(true);
+      const mockEvents = [
+        { event_id: 'event1', name: 'Test Event 1' },
+        { event_id: 'event2', name: 'Test Event 2' }
+      ];
+      mockEventManager.storage.getAllEvents.mockResolvedValue({
+        events: mockEvents
+      });
+      mockEventManager.storage.deleteEvent.mockResolvedValue();
+      
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      
+      await commandHandler.handleClearEvents(mockMessage);
+
+      expect(mockEventManager.storage.getAllEvents).toHaveBeenCalledWith('guild123', 1000);
+      expect(mockEventManager.storage.deleteEvent).toHaveBeenCalledTimes(2);
+      expect(mockEventManager.storage.deleteEvent).toHaveBeenCalledWith('guild123', 'event1');
+      expect(mockEventManager.storage.deleteEvent).toHaveBeenCalledWith('guild123', 'event2');
+      
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Events cleared by administrator'));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Found:** 2 events'));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Deleted:** 2 events'));
+      
+      expect(consoleSpy).toHaveBeenCalledWith(
+        `🗑️ Administrator ${mockMessage.author.tag} cleared 2/2 events`
+      );
+      
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle partial deletion failures', async () => {
+      mockMember.permissions.has.mockReturnValue(true);
+      const mockEvents = [
+        { event_id: 'event1', name: 'Test Event 1' },
+        { event_id: 'event2', name: 'Test Event 2' }
+      ];
+      mockEventManager.storage.getAllEvents.mockResolvedValue({
+        events: mockEvents
+      });
+      
+      // First deletion succeeds, second fails
+      mockEventManager.storage.deleteEvent
+        .mockResolvedValueOnce()
+        .mockRejectedValueOnce(new Error('Delete failed'));
+      
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      const logSpy = jest.spyOn(console, 'log').mockImplementation();
+      
+      await commandHandler.handleClearEvents(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Found:** 2 events'));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Deleted:** 1 events'));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Failed:** 1 events'));
+      
+      expect(consoleSpy).toHaveBeenCalledWith('Failed to delete event event2:', expect.any(Error));
+      expect(logSpy).toHaveBeenCalledWith('🗑️ Administrator TestUser#1234 cleared 1/2 events');
+      
+      consoleSpy.mockRestore();
+      logSpy.mockRestore();
+    });
+
+    it('should handle errors gracefully', async () => {
+      mockMember.permissions.has.mockReturnValue(true);
+      mockEventManager.storage.getAllEvents.mockRejectedValue(new Error('Storage error'));
+      
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      
+      await commandHandler.handleClearEvents(mockMessage);
+
+      expect(consoleSpy).toHaveBeenCalledWith('Error handling clearevents command:', expect.any(Error));
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ An error occurred while clearing events.');
+      
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('handleBotOn', () => {
+    beforeEach(() => {
+      mockMember.permissions = {
+        has: jest.fn()
+      };
+    });
+
+    it('should reject non-administrator users', async () => {
+      mockMember.permissions.has.mockReturnValue(false);
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      
+      await commandHandler.handleBotOn(mockMessage, '123456789012345678');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ This command is restricted to administrators only.');
+      expect(consoleSpy).toHaveBeenCalledWith(
+        `🚨 Non-admin ${mockMessage.author.tag} attempted to use !boton command`
+      );
+      
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle member not found in guild', async () => {
+      mockGuild.members.cache.clear();
+      
+      await commandHandler.handleBotOn(mockMessage, '123456789012345678');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ Could not find your membership in this server.');
+    });
+
+    it('should reject empty run ID', async () => {
+      mockMember.permissions.has.mockReturnValue(true);
+      
+      await commandHandler.handleBotOn(mockMessage, '');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ Please provide a run ID. Usage: `!boton <run_id>`');
+    });
+
+    it('should reject invalid run ID format - too short', async () => {
+      mockMember.permissions.has.mockReturnValue(true);
+      
+      await commandHandler.handleBotOn(mockMessage, 'ab');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ Invalid run ID format. Please provide a valid run ID from Terraform.');
+    });
+
+    it('should reject invalid run ID format - invalid characters', async () => {
+      mockMember.permissions.has.mockReturnValue(true);
+      
+      await commandHandler.handleBotOn(mockMessage, 'invalid@bot#123');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ Invalid run ID format. Please provide a valid run ID from Terraform.');
+    });
+
+    it('should successfully enable bot with valid run ID', async () => {
+      mockMember.permissions.has.mockReturnValue(true);
+      const runId = 'my-terraform-bot-123';
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      mockBot.enableBot = jest.fn();
+      
+      await commandHandler.handleBotOn(mockMessage, runId);
+
+      expect(mockBot.enableBot).toHaveBeenCalledWith(runId);
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Bot Control Update'));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Enabled'));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining(runId));
+      
+      expect(consoleSpy).toHaveBeenCalledWith(
+        `✅ Administrator ${mockMessage.author.tag} enabled bot ${runId}`
+      );
+      
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle errors gracefully', async () => {
+      mockMember.permissions.has.mockReturnValue(true);
+      mockBot.enableBot = jest.fn(() => { throw new Error('Enable error'); });
+      
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      
+      await commandHandler.handleBotOn(mockMessage, '123456789012345678');
+
+      expect(consoleSpy).toHaveBeenCalledWith('Error handling boton command:', expect.any(Error));
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ An error occurred while enabling the bot.');
+      
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('handleBotOff', () => {
+    beforeEach(() => {
+      mockMember.permissions = {
+        has: jest.fn()
+      };
+    });
+
+    it('should reject non-administrator users', async () => {
+      mockMember.permissions.has.mockReturnValue(false);
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      
+      await commandHandler.handleBotOff(mockMessage, '123456789012345678');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ This command is restricted to administrators only.');
+      expect(consoleSpy).toHaveBeenCalledWith(
+        `🚨 Non-admin ${mockMessage.author.tag} attempted to use !botoff command`
+      );
+      
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle member not found in guild', async () => {
+      mockGuild.members.cache.clear();
+      
+      await commandHandler.handleBotOff(mockMessage, '123456789012345678');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ Could not find your membership in this server.');
+    });
+
+    it('should reject empty run ID', async () => {
+      mockMember.permissions.has.mockReturnValue(true);
+      
+      await commandHandler.handleBotOff(mockMessage, '');
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ Please provide a run ID. Usage: `!botoff <run_id>`');
+    });
+
+    it('should reject invalid run ID format - too long', async () => {
+      mockMember.permissions.has.mockReturnValue(true);
+      
+      await commandHandler.handleBotOff(mockMessage, 'a'.repeat(51));
+
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ Invalid run ID format. Please provide a valid run ID from Terraform.');
+    });
+
+    it('should successfully disable bot with valid run ID', async () => {
+      mockMember.permissions.has.mockReturnValue(true);
+      const runId = 'my-terraform-bot-123';
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      mockBot.disableBot = jest.fn();
+      
+      await commandHandler.handleBotOff(mockMessage, runId);
+
+      expect(mockBot.disableBot).toHaveBeenCalledWith(runId);
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Bot Control Update'));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Disabled'));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining(runId));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('ignore all commands except'));
+      
+      expect(consoleSpy).toHaveBeenCalledWith(
+        `🔴 Administrator ${mockMessage.author.tag} disabled bot ${runId}`
+      );
+      
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle errors gracefully', async () => {
+      mockMember.permissions.has.mockReturnValue(true);
+      mockBot.disableBot = jest.fn(() => { throw new Error('Disable error'); });
+      
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      
+      await commandHandler.handleBotOff(mockMessage, '123456789012345678');
+
+      expect(consoleSpy).toHaveBeenCalledWith('Error handling botoff command:', expect.any(Error));
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ An error occurred while disabling the bot.');
+      
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('handlePing', () => {
+    beforeEach(() => {
+      mockBot.getRunId = jest.fn().mockReturnValue('test-run-123');
+      mockBot.getBotId = jest.fn().mockReturnValue('987654321098765432');
+    });
+
+    it('should respond with bot status information', async () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      
+      await commandHandler.handlePing(mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('🏓 **Pong!**'));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('test-run-123'));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('987654321098765432'));
+      expect(mockMessage.reply).toHaveBeenCalledWith(expect.stringContaining('Bot is running and responsive!'));
+      
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining(`🏓 Ping command executed by ${mockMessage.author.tag} - Run ID: test-run-123`)
+      );
+      
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle errors gracefully', async () => {
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      mockBot.getRunId.mockImplementation(() => {
+        throw new Error('Run ID error');
+      });
+      
+      await commandHandler.handlePing(mockMessage);
+
+      expect(consoleSpy).toHaveBeenCalledWith('Error handling ping command:', expect.any(Error));
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ An error occurred while processing the ping command.');
+      
+      consoleSpy.mockRestore();
     });
   });
 });

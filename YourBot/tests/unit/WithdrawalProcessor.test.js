@@ -319,18 +319,26 @@ describe('WithdrawalProcessor', () => {
         delete: jest.fn().mockResolvedValue()
       };
       
-      mockChannel.messages = {
-        fetch: jest.fn().mockResolvedValue(mockTargetMessage)
+      const mockResolutionsChannel = {
+        messages: {
+          fetch: jest.fn().mockResolvedValue(mockTargetMessage)
+        }
       };
 
-      // Mock the same channel for both operations since they use the same channel ID
-      mockGuild.channels.cache.get.mockReturnValue(mockNotificationChannel);
+      // Mock different channels for different operations
+      mockGuild.channels.cache.get
+        .mockReturnValueOnce(mockResolutionsChannel) // First call for resolution deletion
+        .mockReturnValue(mockNotificationChannel); // Subsequent calls for notification
 
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
       
       await withdrawalProcessor.processWithdrawal(mockProposal, mockGuild);
 
+      expect(mockTargetMessage.delete).toHaveBeenCalled();
       expect(mockNotificationChannel.send).toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        `Deleted resolution message ${mockProposal.targetResolution.messageId}`
+      );
       expect(consoleSpy).toHaveBeenCalledWith(
         'Withdrawal notification posted to resolutions123'
       );

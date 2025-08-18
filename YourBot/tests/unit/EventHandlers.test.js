@@ -678,4 +678,298 @@ describe('EventHandlers', () => {
       expect(mockBot.proposalManager.handleVoteReaction).toHaveBeenCalledWith(mockReaction.message, '❌', false);
     });
   });
+
+  describe('handleAllEventsCommand', () => {
+    beforeEach(() => {
+      const mockEventManager = {
+        storage: {
+          getUpcomingEvents: jest.fn()
+        }
+      };
+      mockBot.getEventManager = jest.fn(() => mockEventManager);
+      
+      mockMessage.guild = {
+        id: 'guild123',
+        members: {
+          cache: new Map([
+            ['user123', {
+              id: 'user123'
+            }]
+          ])
+        }
+      };
+      mockMessage.author = { id: 'user123' };
+    });
+
+    it('should handle user not found in guild', async () => {
+      mockMessage.guild.members.cache.clear();
+      
+      await eventHandlers.handleAllEventsCommand(mockMessage);
+      
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ Could not find your membership in this server.');
+    });
+
+    it('should reject users without member role', async () => {
+      mockBot.userValidator.hasRole.mockReturnValue(false);
+      
+      await eventHandlers.handleAllEventsCommand(mockMessage);
+      
+      expect(mockMessage.reply).toHaveBeenCalledWith('❌ You need the member role to use this command.');
+    });
+
+    it('should handle no events found', async () => {
+      mockBot.userValidator.hasRole.mockReturnValue(true);
+      mockBot.getEventManager().storage.getUpcomingEvents.mockResolvedValue([]);
+      
+      await eventHandlers.handleAllEventsCommand(mockMessage);
+      
+      expect(mockMessage.reply).toHaveBeenCalledWith(
+        expect.stringContaining('No upcoming events found across all regions')
+      );
+    });
+
+    it('should show next 3 events when multiple events exist', async () => {
+      mockBot.userValidator.hasRole.mockReturnValue(true);
+      
+      const mockEvents = [
+        {
+          event_id: 'event1',
+          name: 'Event 1',
+          region: 'London',
+          location: 'Central London',
+          event_date: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(), // 1 day from now
+          link: 'https://example.com/1',
+          created_by: 'user1'
+        },
+        {
+          event_id: 'event2', 
+          name: 'Event 2',
+          region: 'Manchester',
+          event_date: new Date(Date.now() + 1000 * 60 * 60 * 48).toISOString(), // 2 days from now
+          created_by: 'user2'
+        },
+        {
+          event_id: 'event3',
+          name: 'Event 3', 
+          region: 'Birmingham',
+          event_date: new Date(Date.now() + 1000 * 60 * 60 * 72).toISOString(), // 3 days from now
+          created_by: 'user3'
+        },
+        {
+          event_id: 'event4',
+          name: 'Event 4',
+          region: 'Leeds',
+          event_date: new Date(Date.now() + 1000 * 60 * 60 * 96).toISOString(), // 4 days from now
+          created_by: 'user4'
+        }
+      ];
+      
+      mockBot.getEventManager().storage.getUpcomingEvents.mockResolvedValue(mockEvents);
+      
+      await eventHandlers.handleAllEventsCommand(mockMessage);
+      
+      expect(mockMessage.reply).toHaveBeenCalledWith(
+        expect.stringContaining('Next 3 Upcoming Events (All Regions)')
+      );
+      expect(mockMessage.reply).toHaveBeenCalledWith(
+        expect.stringContaining('Event 1')
+      );
+      expect(mockMessage.reply).toHaveBeenCalledWith(
+        expect.stringContaining('Event 2')
+      );
+      expect(mockMessage.reply).toHaveBeenCalledWith(
+        expect.stringContaining('Event 3')
+      );
+      expect(mockMessage.reply).toHaveBeenCalledWith(
+        expect.stringContaining('1 more events available')
+      );
+    });
+
+    it('should handle events without location or link', async () => {
+      mockBot.userValidator.hasRole.mockReturnValue(true);
+      
+      const mockEvents = [
+        {
+          event_id: 'event1',
+          name: 'Simple Event',
+          region: 'London',
+          event_date: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+          created_by: 'user1'
+        }
+      ];
+      
+      mockBot.getEventManager().storage.getUpcomingEvents.mockResolvedValue(mockEvents);
+      
+      await eventHandlers.handleAllEventsCommand(mockMessage);
+      
+      expect(mockMessage.reply).toHaveBeenCalledWith(
+        expect.stringContaining('Simple Event')
+      );
+      expect(mockMessage.reply).toHaveBeenCalledWith(
+        expect.stringContaining('London')
+      );
+      // Should not contain location separator or link
+      const replyCall = mockMessage.reply.mock.calls[0][0];
+      expect(replyCall).not.toContain(' → ');
+      expect(replyCall).not.toContain('🔗');
+    });
+
+    it('should handle errors gracefully', async () => {
+      mockBot.userValidator.hasRole.mockReturnValue(true);
+      mockBot.getEventManager().storage.getUpcomingEvents.mockRejectedValue(
+        new Error('Storage error')
+      );
+      
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      
+      await eventHandlers.handleAllEventsCommand(mockMessage);
+      
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Error handling !events command in bot channel:',
+        expect.any(Error)
+      );
+      expect(mockMessage.reply).toHaveBeenCalledWith(
+        '❌ An error occurred while fetching events.'
+      );
+      
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('handleMessage - bot state filtering', () => {
+    beforeEach(() => {
+      mockMessage.author = mockUser;
+      mockMessage.guild = new MockGuild({ id: mockBot.getGuildId() });
+      mockMessage.channel = { id: mockBot.getCommandChannelId() };
+      mockBot.userValidator.isBot.mockReturnValue(false);
+      
+      mockBot.commandHandler = {
+        handleCommand: jest.fn().mockResolvedValue()
+      };
+    });
+
+    it('should ignore all commands when bot is disabled', async () => {
+      mockBot.isThisBotEnabled = jest.fn().mockReturnValue(false);
+      mockMessage.content = '!help';
+      
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      
+      await eventHandlers.handleMessage(mockMessage);
+      
+      expect(consoleSpy).toHaveBeenCalledWith('Bot is disabled, ignoring all commands');
+      expect(mockBot.commandHandler.handleCommand).not.toHaveBeenCalled();
+      
+      consoleSpy.mockRestore();
+    });
+
+    it('should allow boton command when bot is disabled', async () => {
+      mockBot.isThisBotEnabled = jest.fn().mockReturnValue(false);
+      mockMessage.content = '!boton 123456789012345678';
+      
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      
+      await eventHandlers.handleMessage(mockMessage);
+      
+      expect(consoleSpy).toHaveBeenCalledWith('Bot is disabled, but processing admin bot control command');
+      expect(mockBot.commandHandler.handleCommand).toHaveBeenCalled();
+      
+      consoleSpy.mockRestore();
+    });
+
+    it('should allow botoff command when bot is disabled', async () => {
+      mockBot.isThisBotEnabled = jest.fn().mockReturnValue(false);
+      mockMessage.content = '!botoff 123456789012345678';
+      
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      
+      await eventHandlers.handleMessage(mockMessage);
+      
+      expect(consoleSpy).toHaveBeenCalledWith('Bot is disabled, but processing admin bot control command');
+      expect(mockBot.commandHandler.handleCommand).toHaveBeenCalled();
+      
+      consoleSpy.mockRestore();
+    });
+
+    it('should process commands normally when bot is enabled', async () => {
+      mockBot.isThisBotEnabled = jest.fn().mockReturnValue(true);
+      mockMessage.content = '!help';
+      
+      await eventHandlers.handleMessage(mockMessage);
+      
+      expect(mockBot.commandHandler.handleCommand).toHaveBeenCalled();
+    });
+  });
+
+  describe('error handling edge cases', () => {
+    it('should handle errors in handleProposalReaction', async () => {
+      const mockReaction = {
+        emoji: { name: '✅' },
+        message: {
+          guild: { id: mockBot.getGuildId() },
+          channel: { id: '123456789012345683' } // debate channel
+        },
+        partial: false
+      };
+
+      // Mock to throw error
+      mockBot.proposalManager.handleSupportReaction = jest.fn().mockRejectedValue(new Error('Test error'));
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      await eventHandlers.handleProposalReaction(mockReaction, mockUser, 'add');
+
+      expect(consoleSpy).toHaveBeenCalledWith('Error handling support reaction:', expect.any(Error));
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('handleMessage channel authorization edge cases', () => {
+    beforeEach(() => {
+      mockMessage.author = mockUser;
+      mockMessage.guild = new MockGuild({ id: mockBot.getGuildId() });
+      mockBot.userValidator.isBot.mockReturnValue(false);
+      mockBot.isThisBotEnabled = jest.fn().mockReturnValue(true);
+      
+      mockBot.commandHandler = {
+        handleCommand: jest.fn().mockResolvedValue()
+      };
+    });
+
+    it('should reject commands in non-authorized channels', async () => {
+      mockMessage.content = '!help';
+      mockMessage.channel = { 
+        id: 'unauthorized-channel-123', // Not a command channel
+        name: 'general' 
+      };
+
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      await eventHandlers.handleMessage(mockMessage);
+
+      expect(consoleSpy).toHaveBeenCalledWith('Message not in authorized channels for this command, ignoring');
+      expect(mockBot.commandHandler.handleCommand).not.toHaveBeenCalled();
+      
+      consoleSpy.mockRestore();
+    });
+
+    it('should process !events command in bot channels', async () => {
+      mockMessage.content = '!events';
+      mockMessage.channel = { 
+        id: mockBot.getCommandChannelId(), 
+        name: 'moderator-bot' 
+      };
+
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      mockBot.getEventManager = jest.fn(() => ({
+        storage: {
+          getUpcomingEvents: jest.fn().mockResolvedValue([])
+        }
+      }));
+
+      await eventHandlers.handleMessage(mockMessage);
+
+      expect(consoleSpy).toHaveBeenCalledWith('Processing !events command from TestUser#1234 in bot channel');
+      
+      consoleSpy.mockRestore();
+    });
+  });
 });

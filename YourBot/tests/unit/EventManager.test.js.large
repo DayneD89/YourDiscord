@@ -4,16 +4,8 @@ const EventStorage = require('../../src/EventStorage');
 // Mock EventStorage
 jest.mock('../../src/EventStorage');
 
-// Mock timers to control setInterval/setTimeout
+// Use Jest fake timers for timer control
 jest.useFakeTimers();
-
-// Mock global timers
-const mockSetInterval = jest.fn();
-const mockSetTimeout = jest.fn();
-
-// Override global timer functions
-global.setInterval = mockSetInterval;
-global.setTimeout = mockSetTimeout;
 
 describe('EventManager', () => {
     let eventManager;
@@ -27,8 +19,6 @@ describe('EventManager', () => {
         // Reset all mocks
         jest.clearAllMocks();
         jest.clearAllTimers();
-        mockSetInterval.mockClear();
-        mockSetTimeout.mockClear();
 
         // Create mock EventStorage instance
         mockEventStorage = {
@@ -112,6 +102,16 @@ describe('EventManager', () => {
     afterEach(() => {
         // Clear all timers after each test
         jest.clearAllTimers();
+        
+        // Clean up EventManager timers if instance exists
+        if (eventManager && typeof eventManager.cleanup === 'function') {
+            eventManager.cleanup();
+        }
+    });
+
+    afterAll(() => {
+        // Restore real timers
+        jest.useRealTimers();
     });
 
     describe('constructor', () => {
@@ -121,20 +121,34 @@ describe('EventManager', () => {
             expect(eventManager.storage).toBe(mockEventStorage);
         });
 
-        test('should start reminder checker', () => {
-            // Check that setInterval was called for reminder checker
-            expect(mockSetInterval).toHaveBeenCalledWith(
-                expect.any(Function),
-                60 * 60 * 1000 // 1 hour
-            );
-        });
+        test('should start dynamic reminder system when not in Jest', () => {
+            // Temporarily remove JEST_WORKER_ID to allow reminder system to start
+            const originalJestWorkerId = process.env.JEST_WORKER_ID;
+            delete process.env.JEST_WORKER_ID;
 
-        test('should schedule initial reminder check', () => {
-            // Check that setTimeout was called for initial check
-            expect(mockSetTimeout).toHaveBeenCalledWith(
-                expect.any(Function),
-                30000 // 30 seconds
-            );
+            const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+            const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+            
+            // Create new EventManager without JEST_WORKER_ID
+            const newEventManager = new EventManager(mockBot);
+
+            try {
+                expect(setTimeoutSpy).toHaveBeenCalledWith(
+                    expect.any(Function),
+                    10000 // 10 seconds startup delay
+                );
+                expect(consoleSpy).toHaveBeenCalledWith('Starting dynamic reminder system...');
+            } finally {
+                // Always restore JEST_WORKER_ID
+                if (originalJestWorkerId) {
+                    process.env.JEST_WORKER_ID = originalJestWorkerId;
+                }
+                if (newEventManager && typeof newEventManager.cleanup === 'function') {
+                    newEventManager.cleanup();
+                }
+                setTimeoutSpy.mockRestore();
+                consoleSpy.mockRestore();
+            }
         });
     });
 
@@ -166,6 +180,7 @@ describe('EventManager', () => {
 
             expect(mockEventStorage.createEvent).toHaveBeenCalledWith('guild123', {
                 ...validEventData,
+                eventDate: expect.any(String), // Now converted to ISO string
                 createdBy: 'user123'
             });
             expect(sendNotificationSpy).toHaveBeenCalled();
@@ -300,8 +315,8 @@ describe('EventManager', () => {
         });
     });
 
-    describe('checkReminders', () => {
-        test('should process upcoming events', async () => {
+    describe('scheduleNextReminder', () => {
+        test('should schedule next reminder when events exist', async () => {
             const upcomingEvents = [
                 {
                     guild_id: 'guild123',
@@ -309,29 +324,41 @@ describe('EventManager', () => {
                     name: 'Test Event',
                     region: 'London',
                     event_date: new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString(),
+                    created_at: new Date().toISOString(),
                     reminder_status: 'pending'
                 }
             ];
 
             mockEventStorage.getUpcomingEvents.mockResolvedValue(upcomingEvents);
+            const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
-            const processEventReminderSpy = jest.spyOn(eventManager, 'processEventReminder')
-                .mockResolvedValue();
-
-            await eventManager.checkReminders();
+            await eventManager.scheduleNextReminder();
 
             expect(mockEventStorage.getUpcomingEvents).toHaveBeenCalledWith('guild123');
-            expect(processEventReminderSpy).toHaveBeenCalledWith(upcomingEvents[0]);
+            expect(consoleSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Next reminder scheduled')
+            );
+            
+            consoleSpy.mockRestore();
+        });
+
+        test('should handle no upcoming events', async () => {
+            mockEventStorage.getUpcomingEvents.mockResolvedValue([]);
+            const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+            await eventManager.scheduleNextReminder();
+
+            expect(consoleSpy).toHaveBeenCalledWith('🔔 No upcoming events - scheduling check in 1 hour');
+            consoleSpy.mockRestore();
         });
 
         test('should handle errors gracefully', async () => {
             mockEventStorage.getUpcomingEvents.mockRejectedValue(new Error('Database error'));
-            
             const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
-            await eventManager.checkReminders();
+            await eventManager.scheduleNextReminder();
 
-            expect(consoleSpy).toHaveBeenCalledWith('Error checking reminders:', expect.any(Error));
+            expect(consoleSpy).toHaveBeenCalledWith('Error scheduling next reminder:', expect.any(Error));
             consoleSpy.mockRestore();
         });
     });
@@ -864,34 +891,13 @@ describe('EventManager', () => {
         });
     });
 
-    describe('startReminderChecker - development mode', () => {
-        test('should use dev mode intervals when weekReminder is negative', () => {
+    describe('cleanup', () => {
+        test('should clean up all timers', () => {
             const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
             
-            // Mock bot with negative intervals (dev mode)
-            const devMockBot = {
-                ...mockBot,
-                getReminderIntervals: jest.fn().mockReturnValue({
-                    weekReminder: -2 * 60 * 1000, // Negative means dev mode
-                    dayReminder: -1 * 60 * 1000
-                })
-            };
-            
-            // Create new EventManager to trigger constructor
-            new EventManager(devMockBot);
+            eventManager.cleanup();
 
-            expect(consoleSpy).toHaveBeenCalledWith(
-                expect.stringContaining('checking every 30s (dev mode)')
-            );
-            expect(mockSetInterval).toHaveBeenCalledWith(
-                expect.any(Function),
-                30 * 1000 // 30 seconds in dev mode
-            );
-            expect(mockSetTimeout).toHaveBeenCalledWith(
-                expect.any(Function),
-                10000 // 10 seconds in dev mode
-            );
-            
+            expect(consoleSpy).toHaveBeenCalledWith('EventManager timers cleaned up');
             consoleSpy.mockRestore();
         });
     });
