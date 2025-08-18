@@ -113,7 +113,7 @@ class DiscordReactionBot {
             const currentConfig = this.configManager.getConfig();
             console.log(`Reaction configurations loaded: ${currentConfig.length}`);
             
-            const activeVotes = this.proposalManager.getActiveVotes();
+            const activeVotes = await this.proposalManager.getActiveVotes();
             console.log(`Active votes: ${activeVotes.length}`);
             
             if (currentConfig.length > 0) {
@@ -137,6 +137,10 @@ class DiscordReactionBot {
             // Post deployment confirmation message to moderator bot channel
             // Helps confirm new deployments are successful and bot is fully operational
             await this.postDeploymentConfirmation();
+
+            // Signal to enhanced wrapper that bot is fully ready
+            // This triggers health check readiness and deployment completion
+            process.emit('botReady');
 
         });
 
@@ -167,19 +171,36 @@ class DiscordReactionBot {
 
         // Graceful shutdown handlers for clean deployments
         // These ensure the bot disconnects properly and doesn't leave hanging connections
-        process.on('SIGINT', async () => {
-            console.log('Shutting down...');
-            await this.postShutdownMessage('Manual shutdown (SIGINT)');
-            this.client.destroy();
-            process.exit(0);
-        });
+        // Skip in test environment to prevent MaxListenersExceededWarning
+        if (process.env.NODE_ENV !== 'test') {
+            process.on('SIGINT', async () => {
+                console.log('Shutting down...');
+                await this.postShutdownMessage('Manual shutdown (SIGINT)');
+                this.client.destroy();
+                process.exit(0);
+            });
 
-        process.on('SIGTERM', async () => {
-            console.log('Received SIGTERM, shutting down...');
-            await this.postShutdownMessage('Instance termination (SIGTERM)');
-            this.client.destroy();
-            process.exit(0);
-        });
+            process.on('SIGTERM', async () => {
+                console.log('Received SIGTERM, shutting down...');
+                await this.postShutdownMessage('Instance termination (SIGTERM)');
+                this.client.destroy();
+                process.exit(0);
+            });
+
+            // Custom early shutdown handler for ALB draining detection
+            process.on('earlyShutdown', async () => {
+                console.log('Detected early shutdown (ALB draining), sending message...');
+                await this.postShutdownMessage('Instance draining (ALB health check)');
+                // Don't destroy client yet, just send the message
+            });
+
+            // Handle USR1 signal from health check process for draining detection
+            process.on('SIGUSR1', async () => {
+                console.log('Received USR1 signal (ALB draining detected), sending shutdown message...');
+                await this.postShutdownMessage('Instance draining (ALB stopped health checks)');
+                // Don't destroy client yet, just send the message
+            });
+        }
     }
 
     // Getter methods for controlled access to bot configuration and components

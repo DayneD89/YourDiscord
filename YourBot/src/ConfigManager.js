@@ -18,7 +18,6 @@ class ConfigManager {
     // Return current configuration for other modules to use
     // This provides read-only access to prevent accidental modification
     getConfig() {
-        console.log(`DEBUG: getConfig() called, returning ${this.config ? this.config.length : 'null'} items`);
         return this.config ? [...this.config] : this.config;
     }
 

@@ -1,0 +1,18 @@
+[Unit]
+Description=Discord Bot Health Check Server
+After=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/opt/discord-bot
+ExecStart=/bin/bash -lc "/usr/bin/node health-check.js 2>&1 | /usr/bin/tee -a /var/log/discord-bot/health.log"
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=discord-health
+
+[Install]
+WantedBy=multi-user.target

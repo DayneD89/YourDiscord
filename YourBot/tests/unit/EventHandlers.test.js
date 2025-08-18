@@ -130,10 +130,12 @@ describe('EventHandlers', () => {
       mockMessage.fetch = jest.fn().mockResolvedValue(mockMessage);
       mockMessage.channel.id = '123456789012345683'; // debate channel
       
+      // Note: Fetch logic is now handled in the parent processReaction method
+      // This test verifies that handleProposalReaction still works correctly
       await eventHandlers.handleProposalReaction(mockReaction, mockUser, 'add');
 
-      expect(mockReaction.fetch).toHaveBeenCalled();
-      expect(mockMessage.fetch).toHaveBeenCalled();
+      // The method should complete successfully even with partial objects
+      expect(eventHandlers.handleSupportReaction).toHaveBeenCalled();
     });
 
     it('should handle errors gracefully', async () => {

@@ -56,6 +56,8 @@ class CommandHandler {
             await this.handleActiveVotes(message);
         } else if (content.startsWith('!voteinfo ')) {
             await this.handleVoteInfo(message, content.substring(10));
+        } else if (content === '!moderators') {
+            await this.handleViewModerators(message);
         } else {
             await message.reply('❓ Unknown moderator command. Type `!help` for available commands.');
         }
@@ -75,6 +77,8 @@ class CommandHandler {
             await this.handleActiveVotes(message);
         } else if (content.startsWith('!voteinfo ')) {
             await this.handleVoteInfo(message, content.substring(10));
+        } else if (content === '!moderators') {
+            await this.handleViewModerators(message);
         } else if (content === '!help') {
             await this.handleMemberHelp(message);
         } else {
@@ -85,7 +89,7 @@ class CommandHandler {
 
     async handleViewProposals(message) {
         try {
-            // Get pending proposals (gathering support) - these are the most relevant
+            // Get pending proposals (gathering support) - only show proposals that haven't gone to vote yet
             const pendingProposals = await this.bot.getProposalManager().getPendingProposals();
             
             if (pendingProposals.length === 0) {
@@ -93,30 +97,55 @@ class CommandHandler {
                 return;
             }
 
-            // Show up to 5 most supported pending proposals
-            const topPending = pendingProposals.slice(0, 5);
-            let proposalsDisplay = `📋 **Pending Proposals** (${topPending.length} of ${pendingProposals.length} shown):\n\n`;
+            // Show up to 5 proposals: 3 closest to passing + 2 most recent (if not already included)
+            const sortedByProgress = [...pendingProposals].sort((a, b) => {
+                const progressA = a.supportCount / a.requiredSupport;
+                const progressB = b.supportCount / b.requiredSupport;
+                return progressB - progressA; // Highest progress first
+            });
+            
+            const sortedByRecent = [...pendingProposals].sort((a, b) => b.createdAt - a.createdAt);
+            
+            // Get top 3 closest to passing
+            const closestToPass = sortedByProgress.slice(0, 3);
+            const closestIds = new Set(closestToPass.map(p => p.messageId));
+            
+            // Get up to 2 most recent that aren't already in the closest group
+            const additionalRecent = sortedByRecent.filter(p => !closestIds.has(p.messageId)).slice(0, 2);
+            
+            // Combine and limit to 5 total
+            const topPending = [...closestToPass, ...additionalRecent].slice(0, 5);
+            
+            let proposalsDisplay = `📋 **Pending Proposals** (${topPending.length}${pendingProposals.length > 5 ? ` of ${pendingProposals.length}` : ''}):\n\n`;
             
             topPending.forEach((proposal, index) => {
-                const withdrawalText = proposal.isWithdrawal ? ' WITHDRAWAL' : '';
+                const withdrawalText = proposal.isWithdrawal ? '🗑️ WITHDRAWAL' : '📝';
                 const progress = `${proposal.supportCount}/${proposal.requiredSupport}`;
-                const progressBar = this.createProgressBar(proposal.supportCount, proposal.requiredSupport);
+                const progressBar = this.createProgressBar(proposal.supportCount, proposal.requiredSupport, 6);
                 
                 // Create clickable link to the proposal message
                 const messageLink = `https://discord.com/channels/${message.guildId}/${proposal.channelId}/${proposal.messageId}`;
                 
-                // Extract and truncate proposal content
-                const content = proposal.content.substring(0, 80) + (proposal.content.length > 80 ? '...' : '');
+                // Extract proposal title from content (first line after the format indicator)
+                const lines = proposal.content.split('\n');
+                const titleLine = lines[0] || '';
+                const titleMatch = titleLine.match(/\*\*(?:Policy|Governance|Moderator|Withdraw)\*\*:\s*(.+)/i);
+                let rawTitle = titleMatch ? titleMatch[1] : titleLine;
                 
-                proposalsDisplay += `**${index + 1}.** 📋 ${proposal.proposalType.toUpperCase()}${withdrawalText}\n`;
+                // Format user mentions properly (convert <@123456> to @username)
+                rawTitle = this.formatUserMentions(rawTitle, message.guild);
+                
+                const title = rawTitle.substring(0, 60) + (rawTitle.length > 60 ? '...' : '');
+                
+                proposalsDisplay += `**${index + 1}.** ${withdrawalText} **${proposal.proposalType.toUpperCase()}**\n`;
                 proposalsDisplay += `   👤 ${proposal.author.tag}\n`;
-                proposalsDisplay += `   📝 [${content}](${messageLink})\n`;
-                proposalsDisplay += `   ✅ ${progress} support ${progressBar}\n\n`;
+                proposalsDisplay += `   📋 [${title}](${messageLink})\n`;
+                proposalsDisplay += `   ✅ **${progress}** ${progressBar} (${Math.round((proposal.supportCount/proposal.requiredSupport)*100)}%)\n\n`;
             });
 
-            proposalsDisplay += `💡 **Click the links to view full proposals and add your ✅ reaction to support them!**\n`;
+            proposalsDisplay += `💡 **React with ✅ on proposals to show support!**\n`;
             if (pendingProposals.length > 5) {
-                proposalsDisplay += `\n📊 Showing top 5 of ${pendingProposals.length} proposals with reactions.`;
+                proposalsDisplay += `\n📊 *Showing top ${topPending.length} proposals (closest to passing + most recent).*`;
             }
 
             await message.reply(proposalsDisplay);
@@ -129,25 +158,37 @@ class CommandHandler {
 
     async handleActiveVotes(message) {
         try {
-            const activeVotes = this.bot.getProposalManager().getActiveVotes();
+            // Fix async issue - await the promise
+            const activeVotes = await this.bot.getProposalManager().getActiveVotes();
             
-            if (activeVotes.length === 0) {
+            if (!activeVotes || activeVotes.length === 0) {
                 await message.reply('🗳️ No active votes currently running.');
                 return;
             }
 
-            let votesDisplay = `🗳️ **Active Votes** (${activeVotes.length} items):\n\n`;
+            let votesDisplay = `🗳️ **Active Votes** (${activeVotes.length} item${activeVotes.length !== 1 ? 's' : ''}):\n\n`;
             
             activeVotes.forEach((vote, index) => {
-                const author = `<@${vote.authorId}>`;
-                const content = vote.content.substring(0, 150) + (vote.content.length > 150 ? '...' : '');
-                const timeLeft = this.getTimeLeft(vote.endTime);
-                const voteLink = `https://discord.com/channels/${this.bot.getGuildId()}/${vote.voteChannelId}/${vote.voteMessageId}`;
-                const type = vote.proposalType ? ` (${vote.proposalType})` : '';
+                const author = `<@${vote.authorId || vote.author_id}>`;
                 
-                votesDisplay += `**${index + 1}.** 👤 ${author}${type}\n`;
-                votesDisplay += `   📝 ${content}\n`;
-                votesDisplay += `   🗳️ Current: ✅${vote.yesVotes} ❌${vote.noVotes}\n`;
+                // Extract title from content
+                const lines = (vote.content || '').split('\n');
+                const titleLine = lines[0] || '';
+                const titleMatch = titleLine.match(/\*\*(?:Policy|Governance|Moderator|Withdraw)\*\*:\s*(.+)/i);
+                const title = titleMatch ? titleMatch[1].substring(0, 80) + (titleMatch[1].length > 80 ? '...' : '') : titleLine.substring(0, 80) + (titleLine.length > 80 ? '...' : '');
+                
+                const timeLeft = this.getTimeLeft(vote.endTime || vote.end_time);
+                const voteLink = `https://discord.com/channels/${this.bot.getGuildId()}/${vote.voteChannelId || vote.vote_channel_id}/${vote.voteMessageId || vote.message_id}`;
+                const type = vote.proposalType || vote.proposal_type || 'unknown';
+                const yesVotes = vote.yesVotes || vote.yes_votes || 0;
+                const noVotes = vote.noVotes || vote.no_votes || 0;
+                
+                const withdrawalIcon = (vote.isWithdrawal || vote.is_withdrawal) ? '🗑️ ' : '';
+                
+                votesDisplay += `**${index + 1}.** ${withdrawalIcon}**${type.toUpperCase()}** 🗳️\n`;
+                votesDisplay += `   👤 ${author}\n`;
+                votesDisplay += `   📋 ${title}\n`;
+                votesDisplay += `   📊 ✅ **${yesVotes}** vs ❌ **${noVotes}**\n`;
                 votesDisplay += `   ⏰ ${timeLeft}\n`;
                 votesDisplay += `   🔗 [Vote Here](${voteLink})\n\n`;
             });
@@ -157,6 +198,72 @@ class CommandHandler {
         } catch (error) {
             console.error('Error viewing active votes:', error);
             await message.reply('❌ An error occurred while retrieving active votes.');
+        }
+    }
+
+    async handleViewModerators(message) {
+        try {
+            const guild = message.guild;
+            if (!guild) {
+                await message.reply('❌ Could not access guild information.');
+                return;
+            }
+
+            const moderatorRoleId = this.bot.getModeratorRoleId();
+            if (!moderatorRoleId) {
+                await message.reply('❌ Moderator role is not configured.');
+                return;
+            }
+
+            // Get the moderator role
+            const moderatorRole = guild.roles.cache.get(moderatorRoleId);
+            if (!moderatorRole) {
+                await message.reply('❌ Moderator role not found.');
+                return;
+            }
+
+            // Get all members with the moderator role
+            const moderators = moderatorRole.members;
+            
+            if (moderators.size === 0) {
+                await message.reply('👑 **Current Moderators**: None assigned');
+                return;
+            }
+
+            let moderatorsList = `👑 **Current Moderators** (${moderators.size}):\n\n`;
+            
+            // Sort moderators by username for consistent display
+            const sortedModerators = Array.from(moderators.values()).sort((a, b) => 
+                a.user.username.toLowerCase().localeCompare(b.user.username.toLowerCase())
+            );
+            
+            sortedModerators.forEach((member, index) => {
+                const onlineStatus = member.presence?.status === 'online' ? '🟢' : 
+                                   member.presence?.status === 'idle' ? '🟡' :
+                                   member.presence?.status === 'dnd' ? '🔴' : '⚫';
+                
+                moderatorsList += `**${index + 1}.** ${onlineStatus} ${member.user.tag}\n`;
+                moderatorsList += `   📋 <@${member.user.id}>\n`;
+                if (member.joinedAt) {
+                    moderatorsList += `   📅 Joined: <t:${Math.floor(member.joinedAt.getTime() / 1000)}:R>\n`;
+                }
+                moderatorsList += '\n';
+            });
+
+            // Add information about moderator management if available
+            const proposalConfig = this.bot.getProposalManager().proposalConfig;
+            if (proposalConfig && proposalConfig.moderator) {
+                moderatorsList += `💡 **Want to become a moderator?**\n`;
+                moderatorsList += `Post **Add Moderator**: @yourself in <#${proposalConfig.moderator.debateChannelId}>\n\n`;
+                moderatorsList += `**Remove a moderator?**\n`;
+                moderatorsList += `Post **Remove Moderator**: @username in <#${proposalConfig.moderator.debateChannelId}>`;
+            }
+
+            await message.reply(moderatorsList);
+
+        } catch (error) {
+            console.error('Error viewing moderators:', error);
+            await message.reply('❌ An error occurred while retrieving moderator list.');
         }
     }
 
@@ -246,6 +353,8 @@ class CommandHandler {
 \`!voteinfo <vote_message_id>\` - Get detailed info about a specific vote
 \`!forcevote <vote_message_id>\` - Force end an active vote (emergency)
 
+**Community Information:**
+\`!moderators\` - View current server moderators
 \`!help\` - Show this help message
 ${proposalInfo}
 **👥 Members can use \`!proposals\`, \`!activevotes\`, and \`!voteinfo\` in their bot channel.**`;
@@ -278,10 +387,12 @@ ${proposalInfo}
         const helpText = `**🤖 Member Bot Commands**
 
 **Proposal Information:**
-\`!proposals\` - View all proposals and their status
+\`!proposals\` - View pending proposals needing support
 \`!activevotes\` - View currently active votes  
 \`!voteinfo <vote_message_id>\` - Get detailed info about a specific vote
 
+**Community Information:**
+\`!moderators\` - View current server moderators
 \`!help\` - Show this help message
 ${proposalInfo}
 **📋 View passed proposals in the resolutions channels**`;
@@ -303,6 +414,16 @@ ${proposalInfo}
         const filled = Math.min(Math.floor((current / required) * length), length);
         const empty = length - filled;
         return '█'.repeat(filled) + '░'.repeat(empty);
+    }
+
+    formatUserMentions(text, guild) {
+        if (!text || !guild) return text;
+        
+        // Replace user mentions <@123456> with @username
+        return text.replace(/<@!?(\d+)>/g, (match, userId) => {
+            const member = guild.members.cache.get(userId);
+            return member ? `@${member.displayName}` : match;
+        });
     }
 
     getTimeLeft(endTime) {

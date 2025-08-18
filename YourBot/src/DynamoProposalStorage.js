@@ -1,11 +1,16 @@
-const AWS = require('aws-sdk');
+const { DynamoDBClient, DescribeTableCommand } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 
 // DynamoDB-backed storage for proposal and voting data
 // Provides structured storage with efficient querying capabilities
 // Replaces S3-based storage for dynamic data while keeping config in S3
 class DynamoProposalStorage {
     constructor() {
-        this.dynamodb = new AWS.DynamoDB.DocumentClient();
+        // Initialize AWS SDK v3 clients
+        const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-west-2';
+        
+        this.dynamodbClient = new DynamoDBClient({ region });
+        this.dynamodb = DynamoDBDocumentClient.from(this.dynamodbClient);
         this.tableName = null;
         this.guildId = null;
     }
@@ -28,7 +33,7 @@ class DynamoProposalStorage {
     async verifyTableAccess() {
         try {
             console.log('Verifying DynamoDB table access...');
-            await this.dynamodb.describeTable({ TableName: this.tableName }).promise();
+            await this.dynamodbClient.send(new DescribeTableCommand({ TableName: this.tableName }));
             console.log('✅ DynamoDB table access verified');
         } catch (error) {
             console.error('❌ DynamoDB table access failed:', error);
@@ -54,12 +59,12 @@ class DynamoProposalStorage {
                 ...proposalData
             };
 
-            await this.dynamodb.put({
+            await this.dynamodb.send(new PutCommand({
                 TableName: this.tableName,
                 Item: item,
                 // Prevent overwriting existing proposals
                 ConditionExpression: 'attribute_not_exists(message_id)'
-            }).promise();
+            }));
 
             console.log(`✅ Proposal ${messageId} added to DynamoDB`);
         } catch (error) {
@@ -76,13 +81,13 @@ class DynamoProposalStorage {
     // Uses partition key + sort key for efficient single-item lookup
     async getProposal(messageId) {
         try {
-            const result = await this.dynamodb.get({
+            const result = await this.dynamodb.send(new GetCommand({
                 TableName: this.tableName,
                 Key: {
                     guild_id: this.guildId,
                     message_id: messageId
                 }
-            }).promise();
+            }));
 
             return result.Item || null;
         } catch (error) {
@@ -96,13 +101,13 @@ class DynamoProposalStorage {
     async getAllProposals() {
         try {
             console.log('Loading all proposals from DynamoDB...');
-            const result = await this.dynamodb.query({
+            const result = await this.dynamodb.send(new QueryCommand({
                 TableName: this.tableName,
                 KeyConditionExpression: 'guild_id = :guildId',
                 ExpressionAttributeValues: {
                     ':guildId': this.guildId
                 }
-            }).promise();
+            }));
 
             console.log(`✅ Loaded ${result.Items.length} proposals from DynamoDB`);
             return result.Items || [];
@@ -116,7 +121,7 @@ class DynamoProposalStorage {
     // Efficiently queries only proposals with 'voting' status
     async getActiveVotes() {
         try {
-            const result = await this.dynamodb.query({
+            const result = await this.dynamodb.send(new QueryCommand({
                 TableName: this.tableName,
                 IndexName: 'status-index',
                 KeyConditionExpression: 'guild_id = :guildId AND #status = :status',
@@ -127,7 +132,7 @@ class DynamoProposalStorage {
                     ':guildId': this.guildId,
                     ':status': 'voting'
                 }
-            }).promise();
+            }));
 
             return result.Items || [];
         } catch (error) {
@@ -140,7 +145,7 @@ class DynamoProposalStorage {
     // Enables filtering by proposal type (policy, governance, etc.)
     async getProposalsByType(type) {
         try {
-            const result = await this.dynamodb.query({
+            const result = await this.dynamodb.send(new QueryCommand({
                 TableName: this.tableName,
                 IndexName: 'type-index',
                 KeyConditionExpression: 'guild_id = :guildId AND proposal_type = :type',
@@ -148,7 +153,7 @@ class DynamoProposalStorage {
                     ':guildId': this.guildId,
                     ':type': type
                 }
-            }).promise();
+            }));
 
             return result.Items || [];
         } catch (error) {
@@ -183,7 +188,7 @@ class DynamoProposalStorage {
                 expressionAttributeValues[valueName] = updates[key];
             });
 
-            await this.dynamodb.update({
+            await this.dynamodb.send(new UpdateCommand({
                 TableName: this.tableName,
                 Key: {
                     guild_id: this.guildId,
@@ -194,7 +199,7 @@ class DynamoProposalStorage {
                 ExpressionAttributeValues: expressionAttributeValues,
                 // Ensure proposal exists before updating
                 ConditionExpression: 'attribute_exists(message_id)'
-            }).promise();
+            }));
 
             console.log(`✅ Proposal ${messageId} updated in DynamoDB`);
         } catch (error) {
@@ -211,7 +216,7 @@ class DynamoProposalStorage {
     // Uses end-time index to efficiently find votes that need processing
     async getExpiringVotes(beforeTime) {
         try {
-            const result = await this.dynamodb.query({
+            const result = await this.dynamodb.send(new QueryCommand({
                 TableName: this.tableName,
                 IndexName: 'end-time-index',
                 KeyConditionExpression: 'guild_id = :guildId AND end_time <= :endTime',
@@ -224,7 +229,7 @@ class DynamoProposalStorage {
                     ':endTime': beforeTime,
                     ':status': 'voting'
                 }
-            }).promise();
+            }));
 
             return result.Items || [];
         } catch (error) {
@@ -239,14 +244,14 @@ class DynamoProposalStorage {
         try {
             console.log(`Deleting proposal ${messageId} from DynamoDB...`);
             
-            await this.dynamodb.delete({
+            await this.dynamodb.send(new DeleteCommand({
                 TableName: this.tableName,
                 Key: {
                     guild_id: this.guildId,
                     message_id: messageId
                 },
                 ConditionExpression: 'attribute_exists(message_id)'
-            }).promise();
+            }));
 
             console.log(`✅ Proposal ${messageId} deleted from DynamoDB`);
         } catch (error) {

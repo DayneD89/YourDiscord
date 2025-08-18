@@ -42,14 +42,8 @@ class EventHandlers {
         try {
             console.log(`handleProposalReaction: ${reaction.emoji.name} ${type} by ${user.tag} on message ${reaction.message.id}`);
             
-            // Ensure we have complete reaction and message data
-            // Discord sometimes provides partial objects that need to be fetched
-            if (reaction.partial) {
-                await reaction.fetch();
-            }
-            if (reaction.message.partial) {
-                await reaction.message.fetch();
-            }
+            // Note: Partial fetching is already handled in the parallel call from processReaction
+            // No need to duplicate the fetching logic here
 
             const message = reaction.message;
             const emoji = reaction.emoji.name;
@@ -134,12 +128,17 @@ class EventHandlers {
 
     async handleReaction(reaction, user, type) {
         try {
-            // Fetch partial reactions/messages
+            // Fetch partial reactions/messages in parallel for better performance
+            const fetchPromises = [];
             if (reaction.partial) {
-                await reaction.fetch();
+                fetchPromises.push(reaction.fetch());
             }
             if (reaction.message.partial) {
-                await reaction.message.fetch();
+                fetchPromises.push(reaction.message.fetch());
+            }
+            
+            if (fetchPromises.length > 0) {
+                await Promise.all(fetchPromises);
             }
 
             const message = reaction.message;
@@ -154,9 +153,8 @@ class EventHandlers {
 
             console.log(`Reaction ${type}: ${emoji} on message ${messageId} by user ${userId} in guild ${message.guild.id}`);
 
-            // DEBUG: Check what config we have
+            // Check what config we have
             const currentConfig = this.bot.getConfigManager().getConfig();
-            console.log(`DEBUG: Current config has ${currentConfig.length} items:`, currentConfig);
 
             // Find matching config
             const configItem = this.bot.getConfigManager().findConfig(messageId, emoji);

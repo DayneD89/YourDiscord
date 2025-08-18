@@ -671,14 +671,14 @@ describe('ProposalManager', () => {
       expect(result).toBe(mockResult);
     });
 
-    it('should delegate getActiveVotes to storage', () => {
+    it('should delegate getActiveVotes to storage', async () => {
       const mockResult = [{ id: 'vote1' }];
-      mockStorage.getActiveVotes.mockReturnValue(mockResult);
+      mockStorage.getActiveVotes.mockReturnValue(Promise.resolve(mockResult));
 
-      const result = proposalManager.getActiveVotes();
+      const result = await proposalManager.getActiveVotes();
 
       expect(mockStorage.getActiveVotes).toHaveBeenCalled();
-      expect(result).toBe(mockResult);
+      expect(result).toEqual(mockResult);
     });
 
     it('should delegate getProposalsByType to storage', () => {

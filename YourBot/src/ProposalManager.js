@@ -195,12 +195,31 @@ class ProposalManager {
         
         // Get all currently active votes and check their end times
         const activeVotes = await this.storage.getActiveVotes();
-        for (const proposal of activeVotes) {
-            if (now > new Date(proposal.end_time)) {
-                console.log(`Processing ended vote: ${proposal.message_id} (${proposal.proposal_type})`);
-                await this.processEndedVote(proposal.message_id, proposal);
-            }
+        
+        // Filter ended votes first
+        const endedVotes = activeVotes.filter(proposal => now > new Date(proposal.end_time));
+        
+        if (endedVotes.length === 0) {
+            return;
         }
+        
+        console.log(`Found ${endedVotes.length} ended votes to process`);
+        
+        // Process all ended votes in parallel for better performance
+        // Each vote processing is independent and can be done concurrently
+        const results = await Promise.allSettled(
+            endedVotes.map(proposal => {
+                console.log(`Processing ended vote: ${proposal.message_id} (${proposal.proposal_type})`);
+                return this.processEndedVote(proposal.message_id, proposal);
+            })
+        );
+        
+        // Log any failures for monitoring
+        results.forEach((result, index) => {
+            if (result.status === 'rejected') {
+                console.error(`Failed to process ended vote ${endedVotes[index].message_id}:`, result.reason);
+            }
+        });
     }
 
     async processEndedVote(messageId, proposal) {
@@ -209,10 +228,9 @@ class ProposalManager {
             const voteChannel = guild.channels.cache.get(proposal.vote_channel_id);
             const voteMessage = await voteChannel.messages.fetch(messageId);
             
-            // Update final vote counts
+            // Update final vote counts and get updated proposal data
+            // These operations can be optimized by combining the update and retrieval
             await this.updateVoteCounts(voteMessage, proposal);
-            
-            // Get updated proposal data
             const updatedProposal = await this.storage.getProposal(messageId);
             const passed = updatedProposal.yes_votes > updatedProposal.no_votes;
             
@@ -241,10 +259,13 @@ ${passed ?
         'This proposal has been moved to resolutions.') : 
     ''}`;
 
-            await voteMessage.edit(updatedContent);
+            // Update vote message and get final proposal data in parallel if needed
+            const messageUpdatePromise = voteMessage.edit(updatedContent);
             
             // Handle passed proposals
             if (passed) {
+                // Wait for message update to complete, then process the passed proposal
+                await messageUpdatePromise;
                 const finalProposal = await this.storage.getProposal(messageId);
                 if (finalProposal.is_withdrawal) {
                     await this.withdrawalProcessor.processWithdrawal(finalProposal, guild);
@@ -259,6 +280,9 @@ ${passed ?
                 } else {
                     await this.moveToResolutions(finalProposal, guild);
                 }
+            } else {
+                // For failed proposals, just wait for the message update to complete
+                await messageUpdatePromise;
             }
             
             console.log(`Processed ended ${withdrawalText}vote ${messageId}: ${resultText}`);
@@ -312,8 +336,8 @@ ${proposal.content}
         return this.storage.getAllProposals();
     }
 
-    getActiveVotes() {
-        return this.storage.getActiveVotes();
+    async getActiveVotes() {
+        return await this.storage.getActiveVotes();
     }
 
     getProposalsByType(type) {
@@ -362,8 +386,8 @@ ${proposal.content}
                         if (supportReaction) {
                             const supportCount = Math.max(0, supportReaction.count - (supportReaction.me ? 1 : 0));
                             
-                            // Only include proposals with at least 1 support reaction
-                            if (supportCount > 0) {
+                            // Only include proposals with support reactions that haven't reached threshold yet
+                            if (supportCount > 0 && supportCount < proposalMatch.config.supportThreshold) {
                                 pendingProposals.push({
                                     messageId: messageId,
                                     channelId: channel.id,

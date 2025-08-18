@@ -43,7 +43,7 @@ A powerful Discord bot that enables democratic community governance through auto
 - **Private Subnet Security**: Enhanced security with NAT Gateway and no direct internet access
 - **Environment Isolation**: Separate CIDR blocks for main and feature branch deployments
 - **Application Health Checks**: HTTP endpoint monitoring for deployment confidence
-- **S3 Persistence**: Durable storage for configurations and proposal data
+- **Hybrid Storage**: S3 for configurations, DynamoDB for proposal data
 - **Smart Terraform Wrappers**: Discord API retry logic and timeout handling for reliable deployments
 - **GitHub Actions CI/CD**: Automated testing, coverage, and deployment pipeline
 
@@ -199,7 +199,7 @@ Want to run your own instance? Our comprehensive guide covers everything from AW
 
 ### Future Roadmap
 - **Serverless Migration**: Move to AWS Lambda for cost optimization
-- **Database Integration**: Replace S3 with DynamoDB for better performance
+- ✅ **Database Integration**: DynamoDB implemented for proposal storage (completed)
 - **Multi-Guild Support**: Enable single deployment to serve multiple Discord servers
 - **Plugin System**: Modular architecture for custom community features
 
