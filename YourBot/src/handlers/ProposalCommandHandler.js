@@ -1,6 +1,16 @@
 /**
- * ProposalCommandHandler - Handles all proposal-related commands
- * Includes viewing proposals, active votes, moderators, vote info, and force vote
+ * ProposalCommandHandler - Handles all democratic governance commands
+ * 
+ * Provides interfaces for the community proposal and voting system, enabling democratic
+ * decision-making within Discord communities. Supports viewing active governance items,
+ * monitoring vote progress, and administrative oversight of the democratic process.
+ * 
+ * Design rationale:
+ * - Transparency: Members can view all active proposals and votes to stay informed
+ * - Monitoring: Vote information commands help track democratic engagement
+ * - Administrative control: Moderators can force-advance stalled proposals when needed
+ * - Educational: Commands provide guidance on proper proposal formats and procedures
+ * - Integration: Connects Discord interface with the underlying governance engine
  */
 class ProposalCommandHandler {
     constructor(bot) {

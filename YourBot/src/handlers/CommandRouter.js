@@ -5,17 +5,27 @@ const AdminCommandHandler = require('./AdminCommandHandler');
 
 /**
  * CommandRouter - Routes commands to appropriate domain-specific handlers
- * Replaces the monolithic CommandHandler with a cleaner dispatch system
+ * 
+ * Acts as the central dispatch system for all bot commands, replacing a monolithic approach
+ * with cleaner separation of concerns. Each domain (proposals, events, admin) has its own
+ * specialized handler, making the codebase more maintainable and testable.
+ * 
+ * Design rationale:
+ * - Channel-based permissions: Commands are allowed/restricted based on the channel they're sent in
+ * - Role-based access control: Different commands require different permission levels
+ * - Domain separation: Each functional area (governance, events, admin) has its own handler
+ * - Consistent error handling: All command routing failures are handled uniformly
  */
 class CommandRouter {
     constructor(bot) {
         this.bot = bot;
         
-        // Initialize domain-specific handlers
-        this.proposalHandler = new ProposalCommandHandler(bot);
-        this.eventHandler = new EventCommandHandler(bot);
-        this.botControlHandler = new BotControlHandler(bot);
-        this.adminHandler = new AdminCommandHandler(bot);
+        // Initialize domain-specific handlers for clean separation of concerns
+        // Each handler specializes in one functional area to maintain code clarity
+        this.proposalHandler = new ProposalCommandHandler(bot);  // Democratic governance commands
+        this.eventHandler = new EventCommandHandler(bot);        // Community event management
+        this.botControlHandler = new BotControlHandler(bot);     // Bot enable/disable controls
+        this.adminHandler = new AdminCommandHandler(bot);       // System administration commands
     }
 
     async handleCommand(message, isModeratorChannel = false) {
@@ -34,11 +44,13 @@ class CommandRouter {
             const content = message.content.trim();
             console.log(`Processing command: "${content}"`);
 
-            // Determine user permissions
+            // Determine user permissions for access control
+            // Permission checks are done upfront to fail fast and provide clear feedback
             const isModerator = this.bot.getUserValidator().canUseModerator(member, this.bot.getModeratorRoleId());
             const isMember = this.bot.getUserValidator().hasRole(member, this.bot.getMemberRoleId());
 
-            // Handle commands based on channel and permissions
+            // Route to appropriate permission level handler
+            // Channel context determines which commands are available, providing logical separation
             if (isModeratorChannel) {
                 await this.handleModeratorCommand(message, member, content, isModerator);
             } else {

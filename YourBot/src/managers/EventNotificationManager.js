@@ -1,6 +1,16 @@
 /**
  * EventNotificationManager - Handles Discord message formatting and channel notifications
- * Manages event notifications to regional and local channels
+ * 
+ * Manages event notifications to appropriate regional and local Discord channels,
+ * ensuring community members are informed about relevant events in their areas.
+ * 
+ * Design rationale:
+ * - Targeted notifications: Events are sent to region/location channels to reduce noise
+ * - Rich formatting: Uses Discord embeds and structured formatting for better readability
+ * - Channel auto-discovery: Automatically finds appropriate channels based on naming conventions
+ * - Timezone awareness: All times are displayed in UK timezone for consistency
+ * - Multiple notification types: Supports creation, reminder, and cancellation notifications
+ * - Error resilience: Gracefully handles missing channels or notification failures
  */
 class EventNotificationManager {
     constructor(bot) {
@@ -160,7 +170,8 @@ class EventNotificationManager {
             month: 'long',
             day: 'numeric',
             hour: '2-digit',
-            minute: '2-digit'
+            minute: '2-digit',
+            timeZone: 'Europe/London'
         });
 
         return `🎉 **New Event Added!**\n\n` +
@@ -185,7 +196,8 @@ class EventNotificationManager {
             month: 'long',
             day: 'numeric',
             hour: '2-digit',
-            minute: '2-digit'
+            minute: '2-digit',
+            timeZone: 'Europe/London'
         });
 
         let timeText = timeUntil;
@@ -290,7 +302,8 @@ class EventNotificationManager {
             month: 'long',
             day: 'numeric',
             hour: '2-digit',
-            minute: '2-digit'
+            minute: '2-digit',
+            timeZone: 'Europe/London'
         });
 
         return `**${event.name}**\n` +

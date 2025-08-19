@@ -1,6 +1,17 @@
-// Handles proposal withdrawals and resolution removal
-// Manages the complex process of finding and removing passed resolutions
-// Enables democratic reversal of previous community decisions
+/**
+ * WithdrawalProcessor - Handles proposal withdrawals and resolution removal
+ * 
+ * Manages the complex process of finding and removing passed resolutions through
+ * democratic withdrawal proposals. Enables the community to reverse previous decisions
+ * when circumstances change or errors are discovered.
+ * 
+ * Design rationale:
+ * - Democratic reversibility: Communities can correct mistakes through proper process
+ * - Resolution matching: Intelligent search to find target resolutions across channels
+ * - Audit trail: Maintains record of what was withdrawn and when
+ * - Safe removal: Validates withdrawal targets to prevent accidental deletions
+ * - Multi-format support: Handles various ways users might reference resolutions
+ */
 class WithdrawalProcessor {
     constructor(bot, proposalConfig) {
         this.bot = bot;

@@ -1,6 +1,15 @@
 /**
- * EventCommandHandler - Handles all event-related commands
- * Includes adding events, removing events, listing events, and clearing events
+ * EventCommandHandler - Handles all event-related Discord commands
+ * 
+ * Manages the community event system including creation, deletion, listing, and bulk operations.
+ * Integrates with the EventManager for business logic and provides user-friendly Discord interfaces.
+ * 
+ * Design rationale:
+ * - Unified interface: Both members and moderators can use most event commands to encourage participation
+ * - Permission layers: Destructive operations (remove, clear) require moderator privileges
+ * - Rich formatting: Event listings and responses use Discord embeds and formatting for better UX
+ * - Input validation: All user inputs are validated before processing to prevent errors and abuse
+ * - Notification integration: Events automatically notify relevant regional/location channels
  */
 class EventCommandHandler {
     constructor(bot) {
@@ -12,6 +21,12 @@ class EventCommandHandler {
             await this.handleAddEvent(message, content.substring(10));
         } else if (content.startsWith('!removeevent ')) {
             await this.handleRemoveEvent(message, content.substring(13));
+        } else if (content === '!events') {
+            await this.handleListEvents(message);
+        } else if (content.startsWith('!events ')) {
+            await this.handleListEventsByLocation(message, content.substring(8));
+        } else if (content === '!clearevents') {
+            await this.handleClearEvents(message);
         }
     }
 

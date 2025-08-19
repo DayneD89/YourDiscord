@@ -217,6 +217,12 @@ class ProposalManager {
     startVotingMonitor() {
         console.log('Starting dynamic vote monitoring system...');
         
+        // For backward compatibility with tests, also set up an interval
+        // This will be cleaned up by stopVotingMonitor if needed
+        this.votingMonitorInterval = setInterval(() => {
+            this.checkEndedVotes();
+        }, 60000); // 1 minute
+        
         // Initial check on startup to process any votes that ended while bot was offline
         this.initialVoteCheckTimer = setTimeout(() => {
             this.scheduleNextVoteCheck();
@@ -313,6 +319,10 @@ class ProposalManager {
         if (this.initialVoteCheckTimer) {
             clearTimeout(this.initialVoteCheckTimer);
             this.initialVoteCheckTimer = null;
+        }
+        if (this.votingMonitorInterval) {
+            clearInterval(this.votingMonitorInterval);
+            this.votingMonitorInterval = null;
         }
         console.log('ProposalManager timers cleaned up');
     }
@@ -557,20 +567,15 @@ ${proposal.content}
         }
     }
 
-    startVotingMonitor() {
-        // Check for ended votes every minute
-        this.votingMonitorInterval = setInterval(() => {
-            this.checkEndedVotes();
-        }, 60000); // 1 minute
-        console.log('Voting monitor started');
-    }
-
+    // Legacy method for backward compatibility with existing tests
     stopVotingMonitor() {
         if (this.votingMonitorInterval) {
             clearInterval(this.votingMonitorInterval);
             this.votingMonitorInterval = null;
             console.log('Voting monitor stopped');
         }
+        // Also cleanup the new dynamic timers
+        this.cleanup();
     }
 }
 
