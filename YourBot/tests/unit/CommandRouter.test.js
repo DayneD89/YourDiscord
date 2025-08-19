@@ -360,6 +360,15 @@ describe('CommandRouter', () => {
     });
 
     describe('calculateTimeRemaining', () => {
+      beforeEach(() => {
+        jest.useFakeTimers();
+        jest.setSystemTime(new Date('2025-01-01T12:00:00Z')); // Fixed time
+      });
+
+      afterEach(() => {
+        jest.useRealTimers();
+      });
+
       it('should calculate time remaining correctly', () => {
         const futureTime = Date.now() + (2 * 60 * 60 * 1000) + (30 * 60 * 1000); // 2h 30m
         const result = commandRouter.calculateTimeRemaining(futureTime);
