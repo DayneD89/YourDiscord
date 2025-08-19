@@ -182,6 +182,14 @@ describe('CommandRouter', () => {
       );
     });
 
+    it('should route quietaddevent commands', async () => {
+      await commandRouter.handleModeratorCommand(mockMessage, mockMember, '!quietaddevent test', true);
+      
+      expect(mockEventHandler.handleModeratorCommand).toHaveBeenCalledWith(
+        mockMessage, mockMember, '!quietaddevent test'
+      );
+    });
+
     it('should route removeevent commands', async () => {
       await commandRouter.handleModeratorCommand(mockMessage, mockMember, '!removeevent test', true);
       

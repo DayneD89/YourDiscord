@@ -118,9 +118,11 @@ ${proposalInfo}
 
 **Event Management:**
 \`!addevent @RegionRole @LocationRole "Event Name" | YYYY-MM-DD HH:MM | <link>\` - Add new event
+\`!quietaddevent @RegionRole @LocationRole "Event Name" | YYYY-MM-DD HH:MM | <link>\` - Add event without notifications
 \`!removeevent @RegionRole @LocationRole "Event Name" | YYYY-MM-DD HH:MM\` - Remove an event
 Examples: 
 - Add: \`!addevent @London @CentralLondon "Community Meeting" | 2024-08-25 18:00 | https://facebook.com/events/123\`
+- Quiet Add: \`!quietaddevent @London @CentralLondon "Private Meeting" | 2024-08-25 18:00 | https://zoom.us/j/123\`
 - Remove: \`!removeevent @London @CentralLondon "Community Meeting" | 2024-08-25 18:00\`
 
 **Community Information:**

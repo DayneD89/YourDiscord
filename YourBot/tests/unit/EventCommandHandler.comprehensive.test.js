@@ -269,7 +269,8 @@ describe('EventCommandHandler - Comprehensive Tests', () => {
         },
         mockAuthor,
         expect.objectContaining({ name: 'London' }),
-        expect.objectContaining({ name: 'Central London' })
+        expect.objectContaining({ name: 'Central London' }),
+        false
       );
 
       expect(mockMessage.reply).toHaveBeenCalledWith(
@@ -294,7 +295,8 @@ describe('EventCommandHandler - Comprehensive Tests', () => {
         },
         mockAuthor,
         expect.objectContaining({ name: 'London' }),
-        null
+        null,
+        false
       );
     });
 
