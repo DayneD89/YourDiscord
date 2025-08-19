@@ -1,10 +1,9 @@
 name: 🔒 Security Scan
 
 on:
-  push:
-    branches: [ main, features ]
   pull_request:
     branches: [ main ]
+    types: [ opened, synchronize, reopened ]
 
 jobs:
   secret-scan:

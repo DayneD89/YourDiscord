@@ -1,8 +1,6 @@
 name: 🧪 Test & Coverage
 
 on:
-  push:
-    branches: [ main, features ]
   pull_request:
     branches: [ main ]
     types: [ opened, synchronize, reopened ]
