@@ -127,7 +127,7 @@ class EventStorage {
     }
 
     /**
-     * Get upcoming events for reminders
+     * Get upcoming events for reminders (next 7 days)
      */
     async getUpcomingEvents(guildId) {
         try {
@@ -150,6 +150,34 @@ class EventStorage {
             
         } catch (error) {
             console.error('Error getting upcoming events:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Get all future events (no time limit) - for command listings
+     */
+    async getAllUpcomingEvents(guildId, limit = 50) {
+        try {
+            const now = new Date().toISOString();
+            
+            const command = new QueryCommand({
+                TableName: this.tableName,
+                IndexName: 'date-index',
+                KeyConditionExpression: 'guild_id = :guildId AND event_date >= :now',
+                ExpressionAttributeValues: {
+                    ':guildId': guildId,
+                    ':now': now
+                },
+                Limit: limit,
+                ScanIndexForward: true // Chronological order (earliest first)
+            });
+
+            const result = await this.docClient.send(command);
+            return result.Items || [];
+            
+        } catch (error) {
+            console.error('Error getting all upcoming events:', error);
             return [];
         }
     }

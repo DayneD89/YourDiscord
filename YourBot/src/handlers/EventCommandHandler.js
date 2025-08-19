@@ -237,7 +237,7 @@ class EventCommandHandler {
     async handleListEvents(message) {
         try {
             const eventManager = this.bot.getEventManager();
-            const events = await eventManager.getUpcomingEvents(message.guild.id);
+            const events = await eventManager.getAllUpcomingEvents(message.guild.id);
 
             if (!events || events.length === 0) {
                 await message.reply('📅 **No upcoming events scheduled.**\n\n💡 Use `!addevent` to create new events!');
@@ -341,7 +341,7 @@ class EventCommandHandler {
     async handleClearEvents(message) {
         try {
             const eventManager = this.bot.getEventManager();
-            const events = await eventManager.getUpcomingEvents(message.guild.id);
+            const events = await eventManager.getAllUpcomingEvents(message.guild.id);
 
             if (!events || events.length === 0) {
                 await message.reply('📅 **No upcoming events to clear.**');

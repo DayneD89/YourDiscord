@@ -158,6 +158,10 @@ class EventManager {
         return await this.storage.getUpcomingEvents(guildId);
     }
 
+    async getAllUpcomingEvents(guildId, limit = 50) {
+        return await this.storage.getAllUpcomingEvents(guildId, limit);
+    }
+
     /**
      * Remove an event by criteria
      */
