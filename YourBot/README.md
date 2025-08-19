@@ -81,9 +81,10 @@ For quick development testing, create a minimal configuration:
 
 ### Development Scripts
 ```bash
-npm run dev     # Run with nodemon for auto-restart
-npm test        # Run unit tests
-npm run lint    # Check code style (when available)
+npm run dev             # Run with nodemon for auto-restart
+npm test                # Run unit tests (817+ tests)
+npm run test:coverage   # Run tests with coverage report
+npm run test:watch      # Run tests in watch mode for development
 ```
 
 ## 📋 Getting Discord IDs
@@ -137,11 +138,15 @@ YourBot/
 
 ### Design Principles
 
-1. **Modular Architecture**: Each component has a single responsibility
-2. **Event-Driven**: Responds to Discord events and user interactions
-3. **Hybrid Storage**: Uses S3 for configuration and DynamoDB for proposal data
-4. **Graceful Error Handling**: Continues operating despite individual failures
-5. **Configurable Behavior**: Behavior controlled by external configuration
+1. **Clean Architecture**: Organized into core, handlers, managers, processors, storage, and validators
+2. **Separation of Concerns**: Each module has a single, well-defined responsibility
+3. **Dependency Injection**: ComponentOrchestrator manages dependencies and initialization order
+4. **Event-Driven**: Responds to Discord events through specialized handlers
+5. **Hybrid Storage**: S3 for configuration, DynamoDB for dynamic data with AWS SDK v3
+6. **Comprehensive Testing**: 95%+ coverage with unified test utilities and patterns
+7. **Graceful Error Handling**: Continues operating despite individual component failures
+8. **Democratic Governance**: Multi-stage proposal system with automated voting
+9. **Security-First**: Comprehensive validation and permission checking
 
 ### Component Interaction
 

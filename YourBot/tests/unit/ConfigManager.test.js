@@ -1,4 +1,4 @@
-const ConfigManager = require('../../src/ConfigManager');
+const ConfigManager = require('../../src/managers/ConfigManager');
 
 describe('ConfigManager', () => {
   let configManager;

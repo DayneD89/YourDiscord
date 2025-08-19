@@ -1,13 +1,35 @@
-// Executes role-based actions triggered by reactions
-// Parses action strings and safely applies role changes to users
-// Validates user eligibility before performing actions
+/**
+ * ActionExecutor - Safe execution of Discord role-based actions
+ * 
+ * Handles the secure execution of role assignments and removals triggered by reactions.
+ * Provides validation, parsing, and safe execution of configured actions.
+ * 
+ * Security design rationale:
+ * - Action string parsing prevents code injection while allowing flexibility
+ * - User eligibility validation ensures only authorized members get roles
+ * - Role validation prevents assignment of non-existent or restricted roles
+ * - Comprehensive error handling prevents partial state or security bypasses
+ * 
+ * Supported action formats:
+ * - AddRole(user_id,'role_name') - Assigns a role to the reacting user
+ * - RemoveRole(user_id,'role_name') - Removes a role from the reacting user
+ */
 class ActionExecutor {
     constructor(bot) {
         this.bot = bot;
     }
 
-    // Main action executor - parses action strings and delegates to specific handlers
-    // Action format: "AddRole(user_id,'role_name')" or "RemoveRole(user_id,'role_name')"
+    /**
+     * Execute a configured action safely with validation
+     * 
+     * Parses action strings and delegates to appropriate handlers while ensuring
+     * security and validity of all operations.
+     * 
+     * @param {string} action - Action string to parse and execute
+     * @param {GuildMember} member - Discord member to apply action to
+     * @param {Guild} guild - Discord guild context
+     * @returns {boolean} - True if action succeeded, false otherwise
+     */
     async executeAction(action, member, guild) {
         console.log(`Executing action: ${action} for user: ${member.user.tag}`);
 

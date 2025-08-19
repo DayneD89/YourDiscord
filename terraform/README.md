@@ -997,4 +997,35 @@ The Terraform configuration integrates with GitHub Actions for automated deploym
 
 ---
 
-This Terraform configuration provides a robust, scalable foundation for deploying Discord governance bots with full AWS integration and Discord server automation.
+## 🏛️ Modern Infrastructure Architecture
+
+### VPC and Networking
+**Comprehensive networking setup** (see [README_VPC.md](README_VPC.md) for full details):
+- **Shared VPC**: `10.0.0.0/16` with proper subnet isolation
+- **Environment Strategy**: Dev creates global infrastructure, main reuses it
+- **Security**: Private subnets for bot instances, bastion for debugging
+- **Cost Optimization**: VPC endpoints for AWS services
+
+### Bot Deployment Architecture
+**Modern deployment with zero-downtime capabilities**:
+- **Auto Scaling Groups**: Health-checked instance replacement
+- **HTTP Health Checks**: `:3000/health` endpoint verification
+- **Clean Code Structure**: Organized into core, handlers, managers, processors, storage, validators
+- **95%+ Test Coverage**: 817+ comprehensive tests with unified utilities
+- **AWS SDK v3**: Modern async patterns with DynamoDB and S3 integration
+
+### Security and Access
+- **Private Networking**: Bot instances secured in private subnets
+- **Bastion Access**: SSH debugging in dev environment only
+- **Security Groups**: Minimal required access patterns
+- **IAM Roles**: Fine-grained AWS service permissions
+- **Environment Isolation**: Separate configurations for dev vs main
+
+### Deployment Features
+- **Zero-Downtime**: Health-verified instance replacement
+- **Discord API Resilience**: Retry logic for API timeouts
+- **Environment-Specific Config**: Different settings per deployment
+- **Modular Design**: Reusable infrastructure components
+- **Cost Optimization**: VPC endpoints and efficient resource usage
+
+This Terraform configuration provides a robust, scalable foundation for deploying Discord governance bots with full AWS integration, modern architecture, and comprehensive testing.

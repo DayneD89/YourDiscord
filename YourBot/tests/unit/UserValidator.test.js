@@ -1,4 +1,4 @@
-const UserValidator = require('../../src/UserValidator');
+const UserValidator = require('../../src/validators/UserValidator');
 const { MockUser, MockMember } = require('../helpers/mockDiscord');
 const { PermissionFlagsBits } = require('discord.js');
 

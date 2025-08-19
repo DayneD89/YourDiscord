@@ -4,7 +4,15 @@ const { v4: uuidv4 } = require('uuid');
 
 /**
  * EventStorage - Manages event data in DynamoDB
- * Handles event creation, retrieval, and reminder tracking
+ * 
+ * Provides persistent storage for community events with automatic cleanup and reminder tracking.
+ * Uses DynamoDB for scalability and automatic TTL-based cleanup of old events.
+ * 
+ * Storage design rationale:
+ * - DynamoDB provides serverless scaling for varying community sizes
+ * - TTL automatically removes old events without manual cleanup
+ * - Composite keys enable efficient querying by guild and time ranges
+ * - Document model allows flexible event metadata without schema changes
  */
 class EventStorage {
     constructor(tableName, region = 'us-west-2') {
@@ -28,7 +36,8 @@ class EventStorage {
         const eventId = uuidv4();
         const now = new Date().toISOString();
         
-        // Calculate TTL (30 days after event date)
+        // Calculate TTL for automatic cleanup (30 days after event date)
+        // This prevents the table from growing indefinitely with historical events
         const eventDate = new Date(eventData.eventDate);
         const ttlDate = new Date(eventDate.getTime() + (30 * 24 * 60 * 60 * 1000));
         const ttl = Math.floor(ttlDate.getTime() / 1000);

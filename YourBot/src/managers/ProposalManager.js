@@ -1,11 +1,26 @@
-const DynamoProposalStorage = require('./DynamoProposalStorage');
-const ProposalParser = require('./ProposalParser');
-const WithdrawalProcessor = require('./WithdrawalProcessor');
-const ModeratorProcessor = require('./ModeratorProcessor');
+const DynamoProposalStorage = require('../storage/DynamoProposalStorage');
+const ProposalParser = require('../processors/ProposalParser');
+const WithdrawalProcessor = require('../processors/WithdrawalProcessor');
+const ModeratorProcessor = require('../processors/ModeratorProcessor');
 
-// Manages the democratic proposal and voting system
-// Coordinates proposal parsing, storage, voting, and resolution processing
-// Enables community self-governance through structured proposals and voting
+/**
+ * ProposalManager - Democratic governance system coordinator
+ * 
+ * Orchestrates a comprehensive proposal and voting system that enables community self-governance.
+ * Manages the complete lifecycle from proposal creation through voting to resolution.
+ * 
+ * System architecture rationale:
+ * - Multi-stage process (debate → vote → resolution) ensures thorough consideration
+ * - Support thresholds prevent spam while enabling legitimate proposals
+ * - Automated voting monitors ensure timely resolution
+ * - Type-specific configuration allows different governance rules for different proposal types
+ * 
+ * Supported proposal types:
+ * - Policy: Community rules and guidelines
+ * - Moderator: Staff role assignments/removals
+ * - Governance: Changes to the governance system itself
+ * - Withdrawal: Removal of previously passed proposals
+ */
 class ProposalManager {
     constructor(bot) {
         this.bot = bot;
@@ -20,9 +35,19 @@ class ProposalManager {
         this.initialVoteCheckTimer = null;
     }
 
+    /**
+     * Initialize the proposal system with runtime configuration
+     * 
+     * Sets up the complete governance infrastructure including storage, processors,
+     * and automated monitoring systems.
+     * 
+     * @param {string} tableName - DynamoDB table for proposal storage
+     * @param {string} guildId - Discord guild ID for data isolation
+     * @param {Object} proposalConfig - Configuration for different proposal types
+     */
     async initialize(tableName, guildId, proposalConfig) {
-        // Setup proposal system with configuration for different proposal types
-        // Each type has its own channels, thresholds, and voting duration
+        // Configure proposal types with their specific governance rules
+        // Different types enable different governance workflows and requirements
         this.proposalConfig = proposalConfig;
         this.parser = new ProposalParser(proposalConfig);
         this.withdrawalProcessor = new WithdrawalProcessor(this.bot, proposalConfig);
@@ -42,39 +67,43 @@ class ProposalManager {
     // Process support reactions to determine if proposals should advance to voting
     // Tracks reaction thresholds and automatically moves proposals when requirements are met
     async handleSupportReaction(message, reactionCount) {
-        const messageId = message.id;
-        const channelId = message.channel.id;
-        
-        console.log(`handleSupportReaction called for message ${messageId} with ${reactionCount} reactions`);
-        console.log(`Message content: "${message.content.substring(0, 100)}..."`);
-        console.log(`Message channel: ${channelId}`);
-        
-        // Avoid processing proposals that are already in the system
-        // Prevents duplicate tracking and processing conflicts
-        const existingProposal = await this.storage.getProposal(messageId);
-        if (existingProposal) {
-            console.log(`Message ${messageId} already being tracked`);
-            return;
-        }
+        try {
+            const messageId = message.id;
+            const channelId = message.channel.id;
+            
+            console.log(`handleSupportReaction called for message ${messageId} with ${reactionCount} reactions`);
+            console.log(`Message content: "${message.content.substring(0, 100)}..."`);
+            console.log(`Message channel: ${channelId}`);
+            
+            // Avoid processing proposals that are already in the system
+            // Prevents duplicate tracking and processing conflicts
+            const existingProposal = await this.storage.getProposal(messageId);
+            if (existingProposal) {
+                console.log(`Message ${messageId} already being tracked`);
+                return;
+            }
 
-        // Parse proposal to determine type and requirements
-        // Different proposal types have different channels and thresholds
-        const proposalMatch = this.parser.getProposalType(channelId, message.content);
-        if (!proposalMatch) {
-            console.log(`Message ${messageId} is not a valid proposal for this channel`);
-            return;
-        }
+            // Parse proposal to determine type and requirements
+            // Different proposal types have different channels and thresholds
+            const proposalMatch = this.parser.getProposalType(channelId, message.content);
+            if (!proposalMatch) {
+                console.log(`Message ${messageId} is not a valid proposal for this channel`);
+                return;
+            }
 
-        const { type, config, isWithdrawal } = proposalMatch;
-        const requiredReactions = config.supportThreshold;
+            const { type, config, isWithdrawal } = proposalMatch;
+            const requiredReactions = config.supportThreshold;
 
-        // Advance proposal to voting phase when threshold is met
-        // This automates the democratic process without manual intervention
-        if (reactionCount >= requiredReactions) {
-            console.log(`${type} ${isWithdrawal ? 'withdrawal ' : ''}proposal ${messageId} has reached ${reactionCount}/${requiredReactions} support reactions, moving to vote`);
-            await this.moveToVote(message, type, config, isWithdrawal);
-        } else {
-            console.log(`${type} ${isWithdrawal ? 'withdrawal ' : ''}proposal ${messageId} has ${reactionCount}/${requiredReactions} reactions`);
+            // Advance proposal to voting phase when threshold is met
+            // This automates the democratic process without manual intervention
+            if (reactionCount >= requiredReactions) {
+                console.log(`${type} ${isWithdrawal ? 'withdrawal ' : ''}proposal ${messageId} has reached ${reactionCount}/${requiredReactions} support reactions, moving to vote`);
+                await this.moveToVote(message, type, config, isWithdrawal);
+            } else {
+                console.log(`${type} ${isWithdrawal ? 'withdrawal ' : ''}proposal ${messageId} has ${reactionCount}/${requiredReactions} reactions`);
+            }
+        } catch (error) {
+            console.error('Error handling support reaction:', error);
         }
     }
 
@@ -128,6 +157,9 @@ class ProposalManager {
 
             await this.storage.addProposal(voteMessage.id, proposalData);
 
+            // Reschedule vote checks since we added a new vote
+            this.rescheduleVoteChecks();
+
             // Edit original message to indicate it's moved to vote
             try {
                 const withdrawalText = isWithdrawal ? 'withdrawal ' : '';
@@ -180,26 +212,103 @@ class ProposalManager {
         }
     }
 
-    // Start background monitoring for vote completion
-    // Ensures votes are processed promptly when their time expires
+    // Start dynamic vote monitoring system
+    // Schedules vote end processing at exact times instead of constant polling
     startVotingMonitor() {
-        // Regular interval checking for ended votes
-        // More frequent checking ensures timely vote resolution
-        this.votingMonitorTimer = setInterval(async () => {
-            await this.checkEndedVotes();
-        }, 60 * 1000);
-
+        console.log('Starting dynamic vote monitoring system...');
+        
         // Initial check on startup to process any votes that ended while bot was offline
-        this.initialVoteCheckTimer = setTimeout(() => this.checkEndedVotes(), 5000);
+        this.initialVoteCheckTimer = setTimeout(() => {
+            this.scheduleNextVoteCheck();
+        }, 5000);
+
+        console.log('Dynamic vote monitoring system started');
+    }
+
+    /**
+     * Schedule the next vote check based on actual vote end times
+     */
+    async scheduleNextVoteCheck() {
+        try {
+            const activeVotes = await this.storage.getActiveVotes();
+
+            if (activeVotes.length === 0) {
+                console.log('🗳️ No active votes - scheduling check in 1 hour');
+                this.nextVoteCheckTimeout = setTimeout(() => this.scheduleNextVoteCheck(), 60 * 60 * 1000);
+                return;
+            }
+
+            const now = new Date();
+            let nextVoteEndTime = null;
+            let targetVote = null;
+
+            // Find the next vote that will end or has already ended
+            for (const vote of activeVotes) {
+                const voteEndTime = new Date(vote.end_time);
+
+                if (voteEndTime <= now) {
+                    // Vote has already ended - process immediately
+                    nextVoteEndTime = now;
+                    targetVote = vote;
+                    break;
+                } else if (!nextVoteEndTime || voteEndTime < nextVoteEndTime) {
+                    // Vote will end in the future - track earliest
+                    nextVoteEndTime = voteEndTime;
+                    targetVote = vote;
+                }
+            }
+
+            if (nextVoteEndTime && targetVote) {
+                const msUntilVoteEnd = Math.max(0, nextVoteEndTime.getTime() - Date.now());
+                
+                if (msUntilVoteEnd === 0) {
+                    // Process ended vote now and reschedule
+                    console.log(`🗳️ Processing ended vote immediately: ${targetVote.message_id}`);
+                    await this.checkEndedVotes();
+                    this.scheduleNextVoteCheck(); // Reschedule immediately
+                } else {
+                    // Schedule vote processing for exact end time
+                    console.log(`🗳️ Next vote ends in ${Math.round(msUntilVoteEnd/1000)}s for: ${targetVote.message_id}`);
+                    this.nextVoteCheckTimeout = setTimeout(() => {
+                        this.checkEndedVotes().then(() => {
+                            this.scheduleNextVoteCheck(); // Reschedule after processing
+                        });
+                    }, msUntilVoteEnd);
+                }
+            } else {
+                // No active votes, check again in 1 hour
+                console.log('🗳️ No upcoming vote ends - checking again in 1 hour');
+                this.nextVoteCheckTimeout = setTimeout(() => this.scheduleNextVoteCheck(), 60 * 60 * 1000);
+            }
+
+        } catch (error) {
+            console.error('Error scheduling next vote check:', error);
+            // Fallback to checking again in 5 minutes
+            this.nextVoteCheckTimeout = setTimeout(() => this.scheduleNextVoteCheck(), 5 * 60 * 1000);
+        }
+    }
+
+    /**
+     * Reschedule vote checks after new votes are created
+     */
+    rescheduleVoteChecks() {
+        // Cancel current schedule and recalculate
+        if (this.nextVoteCheckTimeout) {
+            clearTimeout(this.nextVoteCheckTimeout);
+            this.nextVoteCheckTimeout = null;
+        }
+        
+        // Schedule immediately
+        setImmediate(() => this.scheduleNextVoteCheck());
     }
 
     /**
      * Cleanup timers - call this during shutdown or in tests
      */
     cleanup() {
-        if (this.votingMonitorTimer) {
-            clearInterval(this.votingMonitorTimer);
-            this.votingMonitorTimer = null;
+        if (this.nextVoteCheckTimeout) {
+            clearTimeout(this.nextVoteCheckTimeout);
+            this.nextVoteCheckTimeout = null;
         }
         if (this.initialVoteCheckTimer) {
             clearTimeout(this.initialVoteCheckTimer);
@@ -211,36 +320,39 @@ class ProposalManager {
     // Check all active votes for expiration and process completed ones
     // Critical for maintaining democratic process integrity and timely results
     async checkEndedVotes() {
-        const now = new Date();
-        console.log('Checking for ended votes...');
-        
-        // Get all currently active votes and check their end times
-        const activeVotes = await this.storage.getActiveVotes();
-        
-        // Filter ended votes first
-        const endedVotes = activeVotes.filter(proposal => now > new Date(proposal.end_time));
-        
-        if (endedVotes.length === 0) {
-            return;
-        }
-        
-        console.log(`Found ${endedVotes.length} ended votes to process`);
-        
-        // Process all ended votes in parallel for better performance
-        // Each vote processing is independent and can be done concurrently
-        const results = await Promise.allSettled(
-            endedVotes.map(proposal => {
-                console.log(`Processing ended vote: ${proposal.message_id} (${proposal.proposal_type})`);
-                return this.processEndedVote(proposal.message_id, proposal);
-            })
-        );
-        
-        // Log any failures for monitoring
-        results.forEach((result, index) => {
-            if (result.status === 'rejected') {
-                console.error(`Failed to process ended vote ${endedVotes[index].message_id}:`, result.reason);
+        try {
+            const now = new Date();
+            
+            // Get all currently active votes and check their end times
+            const activeVotes = await this.storage.getActiveVotes();
+            
+            // Filter ended votes first
+            const endedVotes = activeVotes.filter(proposal => now > new Date(proposal.end_time));
+            
+            if (endedVotes.length === 0) {
+                return;
             }
-        });
+            
+            console.log(`Found ${endedVotes.length} ended votes to process`);
+            
+            // Process all ended votes in parallel for better performance
+            // Each vote processing is independent and can be done concurrently
+            const results = await Promise.allSettled(
+                endedVotes.map(proposal => {
+                    console.log(`Processing ended vote: ${proposal.message_id} (${proposal.proposal_type})`);
+                    return this.processEndedVote(proposal.message_id, proposal);
+                })
+            );
+            
+            // Log any failures for monitoring
+            results.forEach((result, index) => {
+                if (result.status === 'rejected') {
+                    console.error(`Failed to process ended vote ${endedVotes[index].message_id}:`, result.reason);
+                }
+            });
+        } catch (error) {
+            console.error('Error checking ended votes:', error);
+        }
     }
 
     async processEndedVote(messageId, proposal) {
@@ -358,7 +470,12 @@ ${proposal.content}
     }
 
     async getActiveVotes() {
-        return await this.storage.getActiveVotes();
+        try {
+            return await this.storage.getActiveVotes();
+        } catch (error) {
+            console.error('Error getting active votes:', error);
+            return [];
+        }
     }
 
     getProposalsByType(type) {
@@ -437,6 +554,22 @@ ${proposal.content}
         } catch (error) {
             console.error('Error getting pending proposals:', error);
             return [];
+        }
+    }
+
+    startVotingMonitor() {
+        // Check for ended votes every minute
+        this.votingMonitorInterval = setInterval(() => {
+            this.checkEndedVotes();
+        }, 60000); // 1 minute
+        console.log('Voting monitor started');
+    }
+
+    stopVotingMonitor() {
+        if (this.votingMonitorInterval) {
+            clearInterval(this.votingMonitorInterval);
+            this.votingMonitorInterval = null;
+            console.log('Voting monitor stopped');
         }
     }
 }

@@ -55,27 +55,41 @@ A powerful Discord bot that enables democratic community governance through auto
 - **GitHub Actions CI/CD**: Automated testing, coverage, and deployment pipeline
 
 ### 📊 Testing & Coverage
-- **Comprehensive Test Suite**: 360+ unit and integration tests with Jest framework
-- **Code Coverage Enforcement**: Strict coverage thresholds (60-95% by module)
-- **Current Coverage**: 83.5% overall, 91%+ for EventManager and 100% for EventStorage
+- **Comprehensive Test Suite**: 817+ unit and integration tests with Jest framework
+- **Code Coverage Enforcement**: Strict coverage thresholds (95%+ statements)
+- **Current Coverage**: 95.03% statements, 88.29% branches, 93.15% functions, 95.51% lines
+- **High-Quality Standards**: 100% coverage for core components (ConfigManager, EventManager, processors)
 - **Analytics Dashboard**: Interactive coverage reports with code metrics and charts
 - **Automated Coverage Reports**: GitHub Pages deployment with visual analytics
 - **PR Coverage Comments**: Automatic coverage feedback on pull requests
-- **Untested File Detection**: Identifies source files missing test coverage
+- **Test Utilities**: Unified test helpers and mock factories for consistent testing patterns
 
 ## 📁 Project Structure
 
 ```
 yourpartyserver/
 ├── YourBot/                    # Discord bot application
-│   ├── src/                    # Source code modules (EventManager, EventStorage, etc.)
-│   ├── tests/                  # Comprehensive test suite (360+ tests)
-│   ├── coverage/               # Generated coverage reports (83.5% overall)
+│   ├── src/                    # Source code modules (clean architecture)
+│   │   ├── core/               # Core system components (lifecycle, orchestration, config)
+│   │   ├── handlers/           # Event and command handlers
+│   │   ├── managers/           # Business logic managers (proposals, events)
+│   │   ├── processors/         # Specialized processors (parsing, validation)
+│   │   ├── storage/            # Data persistence layer (DynamoDB, S3)
+│   │   ├── validators/         # Permission and data validation
+│   │   └── DiscordReactionBot.js # Main bot coordinator
+│   ├── tests/                  # Comprehensive test suite (817+ tests)
+│   │   ├── unit/               # Unit tests organized by module
+│   │   │   └── core/           # Tests for core components
+│   │   ├── integration/        # Integration tests
+│   │   ├── helpers/            # Unified test utilities and factories
+│   │   └── examples/           # Test pattern examples
+│   ├── coverage/               # Generated coverage reports (95%+ overall)
 │   ├── deployment/             # Health check and deployment files
 │   ├── bot.js                  # Application entry point
 │   └── package.json            # Node.js dependencies with Jest configuration
 ├── terraform/                  # Infrastructure as Code
 │   ├── *.tf                    # Terraform configuration files
+│   ├── modules/                # Reusable Terraform modules
 │   ├── networking.tf           # VPC, subnets, NAT Gateway configuration
 │   ├── user_data_enhanced.sh.tpl # Health check enabled EC2 initialization
 │   ├── messages/               # Discord channel content templates
@@ -201,10 +215,12 @@ Want to run your own instance? Our comprehensive guide covers everything from AW
 - **GitHub Actions**: CI/CD pipeline for code and infrastructure updates
 
 ### Quality Assurance
-- **Test Coverage**: 83.5% global coverage with 90%+ for core modules
+- **Test Coverage**: 95%+ statement coverage with 100% for critical modules
 - **Security Scanning**: Automated token and credential detection
 - **Pre-commit Hooks**: Local security validation before commits
-- **Automated Testing**: Comprehensive test suite with 360+ tests
+- **Automated Testing**: Comprehensive test suite with 817+ tests
+- **Clean Architecture**: Modular design with unified test utilities and documentation
+- **DynamoDB Storage**: Modern AWS SDK v3 with efficient querying and persistence
 
 ### Future Roadmap
 - **Serverless Migration**: Move to AWS Lambda for cost optimization
@@ -220,8 +236,8 @@ Want to run your own instance? Our comprehensive guide covers everything from AW
 [![GitHub issues](https://img.shields.io/github/issues/DayneD89/YourDiscord)](https://github.com/DayneD89/YourDiscord/issues)
 [![GitHub last commit](https://img.shields.io/github/last-commit/DayneD89/YourDiscord)](https://github.com/DayneD89/YourDiscord/commits)
 
-- **Code Coverage**: Enforced quality gates with 83.5%+ global and 90%+ core module requirements
-- **Test Suite**: 360+ comprehensive tests across unit and integration scenarios  
+- **Code Coverage**: Enforced quality gates with 95%+ statements and 93%+ functions coverage
+- **Test Suite**: 817+ comprehensive tests across unit and integration scenarios  
 - **Infrastructure**: Fully automated deployment with Terraform and AWS (ALB health checks)
 - **CI/CD Pipeline**: Continuous integration with GitHub Actions and coverage enforcement
 - **Security**: Automated secret detection and pre-commit security validation

@@ -1,6 +1,8 @@
 // Test AWS SDK v3 migration for DynamoProposalStorage
 // This is a focused test to verify the AWS SDK v3 migration works correctly
 
+const { setupTest } = require('../helpers/testSetup');
+
 // Mock AWS SDK v3 clients
 const mockSend = jest.fn();
 const mockDynamoDBClientSend = jest.fn();
@@ -25,18 +27,23 @@ jest.mock('@aws-sdk/lib-dynamodb', () => ({
   DeleteCommand: jest.fn()
 }));
 
-const DynamoProposalStorage = require('../../src/DynamoProposalStorage');
+const DynamoProposalStorage = require('../../src/storage/DynamoProposalStorage');
 const { DynamoDBClient, DescribeTableCommand } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 
 describe('DynamoProposalStorage AWS SDK v3 Migration', () => {
   let storage;
+  let testSetup;
   const mockTableName = 'test-proposals-table';
   const mockGuildId = '123456789012345678';
 
   beforeEach(() => {
+    testSetup = setupTest({ useFakeTimers: false });
     storage = new DynamoProposalStorage();
-    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    testSetup.restoreFunction();
   });
 
   describe('constructor', () => {

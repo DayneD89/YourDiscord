@@ -1,4 +1,4 @@
-const ActionExecutor = require('../../src/ActionExecutor');
+const ActionExecutor = require('../../src/processors/ActionExecutor');
 const MockBot = require('../helpers/mockBot');
 const { MockMember, MockGuild } = require('../helpers/mockDiscord');
 

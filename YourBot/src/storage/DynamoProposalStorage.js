@@ -1,9 +1,23 @@
 const { DynamoDBClient, DescribeTableCommand } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 
-// DynamoDB-backed storage for proposal and voting data
-// Provides structured storage with efficient querying capabilities
-// Replaces S3-based storage for dynamic data while keeping config in S3
+/**
+ * DynamoProposalStorage - Persistent storage for proposal and voting data
+ * 
+ * Provides structured, queryable storage for the democratic governance system.
+ * Uses AWS DynamoDB for scalability, consistency, and advanced querying capabilities.
+ * 
+ * Storage architecture rationale:
+ * - DynamoDB chosen over S3 for dynamic data due to ACID transactions and query flexibility
+ * - Guild-based partitioning ensures data isolation between Discord servers
+ * - Index-based querying enables efficient lookups by status, type, and expiration
+ * - AWS SDK v3 provides modern async/await patterns and improved performance
+ * 
+ * Data model:
+ * - Primary key: guild_id (partition) + message_id (sort)
+ * - Indexes: status-index, type-index, end-time-index for efficient queries
+ * - Support for proposal lifecycle: pending → voting → passed/failed
+ */
 class DynamoProposalStorage {
     constructor() {
         // Initialize AWS SDK v3 clients
@@ -15,9 +29,18 @@ class DynamoProposalStorage {
         this.guildId = null;
     }
 
+    /**
+     * Initialize DynamoDB storage with deployment-specific configuration
+     * 
+     * Sets up the connection to DynamoDB and verifies table accessibility.
+     * Table name comes from Terraform outputs to ensure environment isolation.
+     * 
+     * @param {string} tableName - DynamoDB table name from deployment
+     * @param {string} guildId - Discord guild ID for data partitioning
+     */
     async initialize(tableName, guildId) {
-        // Initialize DynamoDB storage with table name from Terraform output
-        // Each guild's data is partitioned by guild_id for isolation
+        // Use table name from deployment configuration, with fallbacks for development
+        // Production deployments provide this via Terraform outputs
         this.tableName = tableName || process.env.DYNAMODB_PROPOSALS_TABLE || 'discord-proposals-main';
         this.guildId = guildId;
         

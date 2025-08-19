@@ -1,4 +1,4 @@
-const EventStorage = require('../../src/EventStorage');
+const EventStorage = require('../../src/storage/EventStorage');
 
 // Mock AWS SDK
 jest.mock('@aws-sdk/client-dynamodb', () => ({

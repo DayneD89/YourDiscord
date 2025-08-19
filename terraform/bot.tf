@@ -250,7 +250,7 @@ data "archive_file" "bot_code" {
   }
 
   dynamic "source" {
-    for_each = fileset("${path.module}/../YourBot/src", "*.js")
+    for_each = fileset("${path.module}/../YourBot/src", "**/*.js")
     content {
       content  = file("${path.module}/../YourBot/src/${source.value}")
       filename = "src/${source.value}"

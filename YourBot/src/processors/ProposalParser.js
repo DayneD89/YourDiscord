@@ -1,13 +1,36 @@
-// Parses proposal messages and validates formatting
-// Determines proposal types and generates vote messages
-// Ensures proposals follow required formats for proper processing
+/**
+ * ProposalParser - Proposal format validation and message generation
+ * 
+ * Handles the parsing and validation of proposal messages to ensure they follow
+ * required formats for proper democratic processing.
+ * 
+ * Format enforcement rationale:
+ * - Structured formats ensure proposals are clear and actionable
+ * - Type-specific validation prevents proposals in wrong channels
+ * - Consistent formatting enables automated processing and reduces ambiguity
+ * - Withdrawal detection allows for removal of previously passed proposals
+ * 
+ * Supported formats:
+ * - **Policy**: content (for policy proposals)
+ * - **Moderator**: content (for staff changes)
+ * - **Governance**: content (for system changes)
+ * - **Withdraw**: reference (for proposal removals)
+ */
 class ProposalParser {
     constructor(proposalConfig) {
         this.proposalConfig = proposalConfig;
     }
 
-    // Determine proposal type based on channel and content format
-    // Each proposal type has specific channels and required formatting
+    /**
+     * Determine proposal type from channel context and content format
+     * 
+     * Validates that proposals are submitted in the correct channel with proper formatting.
+     * Different proposal types have different channels and format requirements.
+     * 
+     * @param {string} channelId - Discord channel where proposal was submitted
+     * @param {string} content - Raw proposal content to validate
+     * @returns {Object|null} - {type, config, isWithdrawal} or null if invalid
+     */
     getProposalType(channelId, content) {
         // Match channel to proposal type configuration
         for (const [type, config] of Object.entries(this.proposalConfig)) {

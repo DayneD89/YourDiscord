@@ -1,4 +1,4 @@
-const ProposalParser = require('../../src/ProposalParser');
+const ProposalParser = require('../../src/processors/ProposalParser');
 const { MockMessage, MockUser } = require('../helpers/mockDiscord');
 
 describe('ProposalParser', () => {

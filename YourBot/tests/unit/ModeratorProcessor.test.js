@@ -1,4 +1,4 @@
-const ModeratorProcessor = require('../../src/ModeratorProcessor');
+const ModeratorProcessor = require('../../src/processors/ModeratorProcessor');
 
 // Mock Discord.js structures
 const mockBot = {

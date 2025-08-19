@@ -1,14 +1,28 @@
-// Processes moderator-related proposals (add/remove moderator roles)
-// Handles role assignments and removals when moderator proposals pass
-// Validates moderator actions and applies role changes directly
+/**
+ * ModeratorProcessor - Processes moderator-related proposals (add/remove moderator roles)
+ * 
+ * Handles the democratic process for changing server moderation staff through community proposals.
+ * When moderator proposals pass community voting, this processor executes the role changes.
+ * 
+ * Design rationale:
+ * - Democratic moderator selection ensures community input on server leadership
+ * - Automatic role assignment prevents manual errors and ensures timely changes
+ * - Validation prevents invalid users from being assigned moderator privileges
+ * - Comprehensive logging provides audit trail for moderator changes
+ */
 class ModeratorProcessor {
     constructor(bot, proposalConfig) {
         this.bot = bot;
         this.proposalConfig = proposalConfig;
     }
 
-    // Parse moderator proposal to extract target user and action type
-    // Format: **Add Moderator**: @user or **Remove Moderator**: @user
+    /**
+     * Parse moderator proposal to extract target user and action type
+     * Format: **Add Moderator**: @user or **Remove Moderator**: @user
+     * 
+     * This parsing ensures only properly formatted proposals can affect moderator status,
+     * preventing accidental or malformed role changes.
+     */
     parseModeratorProposal(content) {
         console.log(`Parsing moderator proposal: ${content}`);
         

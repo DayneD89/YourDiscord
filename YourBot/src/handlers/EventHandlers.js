@@ -1,9 +1,18 @@
 const { ChannelType } = require('discord.js');
-const ActionExecutor = require('./ActionExecutor');
+const ActionExecutor = require('../processors/ActionExecutor');
 
-// Handles Discord events and routes them to appropriate processors
-// Manages both reaction role events and proposal system events
-// Acts as the main entry point for all Discord interactions
+/**
+ * EventHandlers - Central Discord event processor and router
+ * 
+ * Handles all incoming Discord events (reactions, messages) and routes them to appropriate processors.
+ * Coordinates between the legacy reaction role system and the new proposal/voting system.
+ * Acts as the primary interface between Discord.js events and bot functionality.
+ * 
+ * Design rationale:
+ * - Centralizes event handling to prevent duplicate listeners and ensure consistent processing
+ * - Separates concerns by delegating to specialized processors based on event context
+ * - Provides a unified error handling approach for all Discord interactions
+ */
 class EventHandlers {
     constructor(bot) {
         this.bot = bot;
@@ -18,7 +27,16 @@ class EventHandlers {
         await this.processReaction(reaction, user, 'remove');
     }
 
-    // Common reaction processing logic to avoid duplication
+    /**
+     * Core reaction processing logic
+     * 
+     * Processes reactions for both reaction roles and proposal systems simultaneously.
+     * This dual-processing approach ensures backward compatibility while enabling new features.
+     * 
+     * @param {MessageReaction} reaction - Discord reaction object
+     * @param {User} user - User who added/removed the reaction
+     * @param {string} type - 'add' or 'remove'
+     */
     async processReaction(reaction, user, type) {
         console.log(`[RAW REACTION EVENT] Reaction ${type}: ${reaction.emoji.name} by ${user.tag} on message ${reaction.message.id}`);
         
@@ -40,8 +58,21 @@ class EventHandlers {
         }
     }
 
-    // Handle reactions specifically for the proposal/voting system
-    // Manages support reactions in debate channels and voting reactions in vote channels
+    /**
+     * Handle proposal system reactions
+     * 
+     * Routes reactions to appropriate proposal processors based on channel context.
+     * Supports both proposal support gathering and vote counting.
+     * 
+     * Channel-based routing rationale:
+     * - Debate channels: Support gathering for proposals to reach voting threshold
+     * - Vote channels: Vote counting for active proposals
+     * - Resolution channels: Read-only archive, no processing needed
+     * 
+     * @param {MessageReaction} reaction - Discord reaction object
+     * @param {User} user - User who reacted
+     * @param {string} type - 'add' or 'remove'
+     */
     async handleProposalReaction(reaction, user, type) {
         try {
             console.log(`handleProposalReaction: ${reaction.emoji.name} ${type} by ${user.tag} on message ${reaction.message.id}`);
@@ -187,7 +218,14 @@ class EventHandlers {
     // Process all incoming messages for bot commands
     // Filters for command prefix and authorized channels before processing
     async handleMessage(message) {
-        console.log(`Message received: "${message.content}" in channel ${message.channel.id} by ${message.author.tag}`);
+        try {
+            // Null check for message object
+            if (!message || !message.content || !message.channel || !message.author) {
+                console.error('Invalid message object received');
+                return;
+            }
+
+            console.log(`Message received: "${message.content}" in channel ${message.channel.id} by ${message.author.tag}`);
         
         // Ignore messages from bots to prevent command loops and spam
         if (this.bot.getUserValidator().isBot(message.author)) {
@@ -200,6 +238,7 @@ class EventHandlers {
             // Allow boton and botoff commands even when bot is disabled (admin override)
             if (message.content.startsWith('!boton ') || message.content.startsWith('!botoff ')) {
                 console.log('Bot is disabled, but processing admin bot control command');
+                // Continue processing the bot control command
             } else {
                 console.log('Bot is disabled, ignoring all commands');
                 return;
@@ -238,7 +277,10 @@ class EventHandlers {
         }
 
         console.log(`Processing command from ${message.author.tag}: "${message.content}" in ${isModeratorChannel ? 'moderator' : 'member'} channel`);
-        await this.bot.commandHandler.handleCommand(message, isModeratorChannel);
+        await this.bot.commandRouter.handleCommand(message, isModeratorChannel);
+        } catch (error) {
+            console.error('Error handling message:', error);
+        }
     }
 
     /**
@@ -407,6 +449,11 @@ class EventHandlers {
      * Get human-readable time until/since event
      */
     getTimeUntilEvent(eventDate) {
+        // Handle null, undefined, or invalid dates
+        if (!eventDate || typeof eventDate.getTime !== 'function' || isNaN(eventDate.getTime())) {
+            return 'Event has started';
+        }
+        
         const now = new Date();
         const timeDiff = eventDate.getTime() - now.getTime();
         

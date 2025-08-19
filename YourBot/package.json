@@ -46,25 +46,25 @@
       "<rootDir>/tests/setup.js"
     ],
     "coverageThreshold": {
-      "src/ActionExecutor.js": {
+      "src/processors/ActionExecutor.js": {
         "branches": 95,
         "functions": 100,
         "lines": 95,
         "statements": 95
       },
-      "src/UserValidator.js": {
+      "src/validators/UserValidator.js": {
         "branches": 95,
         "functions": 100,
         "lines": 95,
         "statements": 95
       },
-      "src/ProposalParser.js": {
+      "src/processors/ProposalParser.js": {
         "branches": 90,
         "functions": 95,
         "lines": 95,
         "statements": 95
       },
-      "src/EventHandlers.js": {
+      "src/handlers/EventHandlers.js": {
         "branches": 90,
         "functions": 95,
         "lines": 95,

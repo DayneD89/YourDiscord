@@ -1,16 +1,37 @@
 const { PermissionFlagsBits } = require('discord.js');
 
-// Validates user permissions and eligibility for bot actions
-// Centralizes permission checking logic to ensure consistent security
-// Prevents unauthorized users from accessing restricted bot features
+/**
+ * UserValidator - Centralized permission and eligibility validation
+ * 
+ * Provides consistent security checks across all bot features to prevent unauthorized access.
+ * Validates user eligibility based on roles, permissions, and account status.
+ * 
+ * Security design rationale:
+ * - Centralized validation prevents inconsistent permission checks across modules
+ * - Detailed rejection reasons aid in troubleshooting and user support
+ * - Bot detection prevents automation loops and abuse
+ * - Timeout/mute awareness ensures compliance with moderation actions
+ * 
+ * Permission levels:
+ * - Member: Basic bot interactions (requires member role)
+ * - Moderator: Administrative actions (requires moderator role OR ManageRoles permission)
+ * - Bot: System-level access (internal bot operations only)
+ */
 class UserValidator {
     constructor() {
         // Future: Add mute tracking, timeout tracking, etc.
     }
 
-    // Comprehensive eligibility check for bot actions
-    // Validates membership status, timeout status, and bot detection
-    // Provides detailed reasons for denials to aid in troubleshooting
+    /**
+     * Comprehensive eligibility check for bot interactions
+     * 
+     * Validates all aspects of user eligibility including membership, moderation status,
+     * and bot detection. Provides detailed feedback for denied actions.
+     * 
+     * @param {GuildMember} member - Discord guild member object
+     * @param {string} memberRoleId - Required member role ID
+     * @returns {Object} - {canAct: boolean, reason?: string}
+     */
     canAct(member, memberRoleId) {
         // Prevent bots from triggering actions to avoid automation loops
         if (member.user.bot) {

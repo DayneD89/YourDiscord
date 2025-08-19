@@ -1,4 +1,4 @@
-const WithdrawalProcessor = require('../../src/WithdrawalProcessor');
+const WithdrawalProcessor = require('../../src/processors/WithdrawalProcessor');
 
 describe('WithdrawalProcessor', () => {
   let withdrawalProcessor;
