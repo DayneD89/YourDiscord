@@ -53,7 +53,7 @@ class EventManager {
      * @param {Object} locationRole - Discord role for location-specific notifications
      * @returns {Object} - Created event with database ID
      */
-    async createEvent(guildId, eventData, createdBy, regionRole = null, locationRole = null) {
+    async createEvent(guildId, eventData, createdBy, regionRole = null, locationRole = null, quiet = false) {
         try {
             // Validate event data
             const validation = this.validator.validateEventData(eventData);
@@ -90,8 +90,10 @@ class EventManager {
             // Create event in database
             const event = await this.storage.createEvent(guildId, eventDataWithISODate);
 
-            // Send notification to region and location channels
-            await this.notificationManager.sendEventNotification(guild, event, regionRole, locationRole);
+            // Send notification to region and location channels (unless quiet mode)
+            if (!quiet) {
+                await this.notificationManager.sendEventNotification(guild, event, regionRole, locationRole);
+            }
 
             // Reschedule reminders to include this new event
             this.reminderManager.rescheduleReminders();

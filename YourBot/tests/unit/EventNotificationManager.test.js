@@ -446,11 +446,16 @@ describe('EventNotificationManager', () => {
     });
 
     it('should use current time when now parameter not provided', () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2025-01-01T12:00:00Z')); // Fixed time
+      
       const futureDate = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 hours from now
 
       const result = eventNotificationManager.getTimeUntilEvent(futureDate);
 
       expect(result).toMatch(/2 hours?/);
+      
+      jest.useRealTimers();
     });
   });
 

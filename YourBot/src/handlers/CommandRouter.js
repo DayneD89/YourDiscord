@@ -74,8 +74,9 @@ class CommandRouter {
         if (content.startsWith('!forcevote ') || content.startsWith('!voteinfo ') ||
             content === '!proposals' || content === '!activevotes' || content === '!moderators') {
             await this.proposalHandler.handleModeratorCommand(message, member, content);
-        } else if (content.startsWith('!addevent ') || content.startsWith('!removeevent ') ||
-                   content === '!events' || content.startsWith('!events ') || content === '!clearevents') {
+        } else if (content.startsWith('!addevent ') || content.startsWith('!quietaddevent ') || 
+                   content.startsWith('!removeevent ') || content === '!events' || 
+                   content.startsWith('!events ') || content === '!clearevents') {
             await this.eventHandler.handleModeratorCommand(message, member, content);
         } else if (content.startsWith('!boton ') || content.startsWith('!botoff ')) {
             await this.botControlHandler.handleModeratorCommand(message, member, content);

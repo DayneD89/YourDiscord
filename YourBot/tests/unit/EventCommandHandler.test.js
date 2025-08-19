@@ -58,6 +58,15 @@ describe('EventCommandHandler', () => {
       spy.mockRestore();
     });
 
+    it('should handle !quietaddevent command', async () => {
+      const spy = jest.spyOn(eventCommandHandler, 'handleAddEvent').mockResolvedValue();
+      
+      await eventCommandHandler.handleModeratorCommand(mockMessage, mockMember, '!quietaddevent test args');
+      
+      expect(spy).toHaveBeenCalledWith(mockMessage, 'test args', true);
+      spy.mockRestore();
+    });
+
     it('should handle !removeevent command', async () => {
       const spy = jest.spyOn(eventCommandHandler, 'handleRemoveEvent').mockResolvedValue();
       

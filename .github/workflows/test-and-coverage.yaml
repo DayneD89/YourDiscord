@@ -261,7 +261,38 @@ jobs:
           FILES_CONFIG=$(find .. -maxdepth 2 -name "*.json" -o -name "*.yml" -o -name "*.yaml" | grep -v node_modules | wc -l || echo "0")
           FILES_UNCOVERED=$(find src -name "*.js" | while read file; do
             basename_file=$(basename "$file" .js)
-            if [ ! -f "tests/unit/${basename_file}.test.js" ] && [ ! -f "tests/integration/${basename_file}.test.js" ]; then
+            relative_path=${file#src/}
+            dir_path=$(dirname "$relative_path")
+            
+            # Check multiple test file patterns
+            test_exists=false
+            
+            # Pattern 1: tests/unit/filename.test.js
+            if [ -f "tests/unit/${basename_file}.test.js" ]; then
+              test_exists=true
+            fi
+            
+            # Pattern 2: tests/integration/filename.test.js  
+            if [ -f "tests/integration/${basename_file}.test.js" ]; then
+              test_exists=true
+            fi
+            
+            # Pattern 3: tests/unit/subdir/filename.test.js
+            if [ -f "tests/unit/${dir_path}/${basename_file}.test.js" ]; then
+              test_exists=true
+            fi
+            
+            # Pattern 4: Multiple test files with basename prefix (ProposalManager.*.test.js)
+            if find tests -name "${basename_file}.*.test.js" | grep -q .; then
+              test_exists=true
+            fi
+            
+            # Pattern 5: Integration tests with different patterns
+            if find tests -name "*${basename_file}*.test.js" | grep -q .; then
+              test_exists=true
+            fi
+            
+            if [ "$test_exists" = false ]; then
               echo "$file"
             fi
           done | wc -l)
@@ -270,8 +301,9 @@ jobs:
           TEST_TO_SRC_RATIO=$(echo "scale=2; ${LOC_TESTS} / ${LOC_JS} * 100" | bc -l 2>/dev/null || echo "0")
           FILES_TESTED=$((${FILES_SRC} - ${FILES_UNCOVERED}))
           
-          # Get test counts
-          TEST_COUNT=$(grep -r "describe\|test\|it(" tests/ | wc -l || echo "0")
+          # Get actual test counts from Jest output
+          TEST_OUTPUT=$(npm test 2>&1 | grep "Tests:" | head -1 || echo "Tests: 0 passed, 0 total")
+          TEST_COUNT=$(echo "$TEST_OUTPUT" | grep -oE "[0-9]+ total" | grep -oE "[0-9]+" | head -1 || echo "0")
           
           cd ..
           
@@ -429,7 +461,7 @@ jobs:
                       <div style="margin-top: 20px;">
                           <div class="badge">🧪 ${TEST_COUNT} Tests</div>
                           <div class="badge">📁 ${FILES_SRC} Source Files</div>
-                          <div class="badge">⚠️ ${FILES_UNCOVERED} Untested Files</div>
+                          <div class="badge$([ ${FILES_UNCOVERED} -eq 0 ] && echo '' || echo ' warning')">⚠️ ${FILES_UNCOVERED} Untested Files</div>
                       </div>
                   </div>
                   

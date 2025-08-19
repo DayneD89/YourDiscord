@@ -19,6 +19,8 @@ class EventCommandHandler {
     async handleModeratorCommand(message, member, content) {
         if (content.startsWith('!addevent ')) {
             await this.handleAddEvent(message, content.substring(10));
+        } else if (content.startsWith('!quietaddevent ')) {
+            await this.handleAddEvent(message, content.substring(15), true);
         } else if (content.startsWith('!removeevent ')) {
             await this.handleRemoveEvent(message, content.substring(13));
         } else if (content === '!events') {
@@ -44,7 +46,7 @@ class EventCommandHandler {
         }
     }
 
-    async handleAddEvent(message, eventArgs) {
+    async handleAddEvent(message, eventArgs, quiet = false) {
         try {
             // Parse command arguments: !addevent @RegionRole @LocationRole <name> | <date> | <link>
             // Format: !addevent @London @CentralLondon "Community Meeting" | 2024-08-25 18:00 | https://example.com/event
@@ -126,9 +128,13 @@ class EventCommandHandler {
 
             // Create event using EventManager with role objects
             const eventManager = this.bot.getEventManager();
-            const event = await eventManager.createEvent(message.guild.id, eventData, message.author, regionRole, locationRole);
+            const event = await eventManager.createEvent(message.guild.id, eventData, message.author, regionRole, locationRole, quiet);
 
-            await message.reply(`✅ **Event created successfully!**\n\n**${event.name}**\n📅 **Date:** ${dateStr}\n📍 **Region:** ${regionRole} ${locationRole ? `\n🏘️ **Location:** ${locationRole}` : ''}${event.link ? `\n🔗 **Link:** <${event.link}>` : ''}\n\n🎉 Notifications have been sent to the appropriate channels!\n\n💡 **To remove this event later:** \`!removeevent ${regionRole} ${locationRole ? `${locationRole} ` : ''}"${event.name}" | ${dateStr}\``);
+            const notificationText = quiet 
+                ? `🤫 Event created quietly - no notifications sent.` 
+                : `🎉 Notifications have been sent to the appropriate channels!`;
+            
+            await message.reply(`✅ **Event created successfully!**\n\n**${event.name}**\n📅 **Date:** ${dateStr}\n📍 **Region:** ${regionRole} ${locationRole ? `\n🏘️ **Location:** ${locationRole}` : ''}${event.link ? `\n🔗 **Link:** <${event.link}>` : ''}\n\n${notificationText}\n\n💡 **To remove this event later:** \`!removeevent ${regionRole} ${locationRole ? `${locationRole} ` : ''}"${event.name}" | ${dateStr}\``);
 
         } catch (error) {
             console.error('Error handling add event command:', error);
