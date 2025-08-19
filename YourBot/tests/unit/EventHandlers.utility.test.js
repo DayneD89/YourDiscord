@@ -83,9 +83,7 @@ describe('EventHandlers - Utility Functions & Error Handling', () => {
   describe('handleAllEventsCommand', () => {
     beforeEach(() => {
       const mockEventManager = {
-        storage: {
-          getUpcomingEvents: jest.fn().mockResolvedValue([])
-        }
+        getAllUpcomingEvents: jest.fn().mockResolvedValue([])
       };
       mockBot.getEventManager = jest.fn(() => mockEventManager);
       
@@ -112,7 +110,7 @@ describe('EventHandlers - Utility Functions & Error Handling', () => {
 
     it('should handle no events found', async () => {
       mockBot.userValidator.hasRole.mockReturnValue(true);
-      mockBot.getEventManager().storage.getUpcomingEvents.mockResolvedValue([]);
+      mockBot.getEventManager().getAllUpcomingEvents.mockResolvedValue([]);
       
       await eventHandlers.handleAllEventsCommand(mockMessage);
       
@@ -141,7 +139,7 @@ describe('EventHandlers - Utility Functions & Error Handling', () => {
         }
       ];
       
-      mockBot.getEventManager().storage.getUpcomingEvents.mockResolvedValue(mockEvents);
+      mockBot.getEventManager().getAllUpcomingEvents.mockResolvedValue(mockEvents);
       
       await eventHandlers.handleAllEventsCommand(mockMessage);
       
@@ -162,7 +160,7 @@ describe('EventHandlers - Utility Functions & Error Handling', () => {
         created_by: 'user123'
       }));
       
-      mockBot.getEventManager().storage.getUpcomingEvents.mockResolvedValue(mockEvents);
+      mockBot.getEventManager().getAllUpcomingEvents.mockResolvedValue(mockEvents);
       
       await eventHandlers.handleAllEventsCommand(mockMessage);
       
@@ -173,7 +171,7 @@ describe('EventHandlers - Utility Functions & Error Handling', () => {
 
     it('should handle storage errors gracefully', async () => {
       mockBot.userValidator.hasRole.mockReturnValue(true);
-      mockBot.getEventManager().storage.getUpcomingEvents.mockRejectedValue(new Error('Storage error'));
+      mockBot.getEventManager().getAllUpcomingEvents.mockRejectedValue(new Error('Storage error'));
       
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
       

@@ -357,9 +357,7 @@ describe('EventHandlers - Message Processing', () => {
   describe('handleAllEventsCommand', () => {
     beforeEach(() => {
       mockBot.getEventManager = jest.fn().mockReturnValue({
-        storage: {
-          getUpcomingEvents: jest.fn().mockResolvedValue([])
-        }
+        getAllUpcomingEvents: jest.fn().mockResolvedValue([])
       });
 
       mockMessage.guild = {
@@ -394,7 +392,7 @@ describe('EventHandlers - Message Processing', () => {
         }
       ];
 
-      mockBot.getEventManager().storage.getUpcomingEvents.mockResolvedValue(mockEvents);
+      mockBot.getEventManager().getAllUpcomingEvents.mockResolvedValue(mockEvents);
 
       // Mock the regions that the bot knows about
       mockBot.getConfig = jest.fn().mockReturnValue({
@@ -408,7 +406,7 @@ describe('EventHandlers - Message Processing', () => {
     });
 
     it('should handle errors in all events command', async () => {
-      mockBot.getEventManager().storage.getUpcomingEvents.mockRejectedValue(new Error('Database error'));
+      mockBot.getEventManager().getAllUpcomingEvents.mockRejectedValue(new Error('Database error'));
 
       await eventHandlers.handleAllEventsCommand(mockMessage);
 

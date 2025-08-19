@@ -30,6 +30,7 @@ describe('EventManager (Basic)', () => {
         mockEventStorage = {
             createEvent: jest.fn(),
             getUpcomingEvents: jest.fn(),
+            getAllUpcomingEvents: jest.fn(),
             updateReminderStatus: jest.fn(),
             getEventsByRegion: jest.fn(),
             getUpcomingEventsByRegion: jest.fn(),
@@ -278,6 +279,18 @@ describe('EventManager (Basic)', () => {
             const result = await eventManager.getUpcomingEvents('guild123');
 
             expect(mockEventStorage.getUpcomingEvents).toHaveBeenCalledWith('guild123');
+            expect(result).toBe(expectedEvents);
+        });
+    });
+
+    describe('getAllUpcomingEvents', () => {
+        test('should get all upcoming events', async () => {
+            const expectedEvents = [{ id: 'event1' }, { id: 'event2' }];
+            mockEventStorage.getAllUpcomingEvents.mockResolvedValue(expectedEvents);
+
+            const result = await eventManager.getAllUpcomingEvents('guild123');
+
+            expect(mockEventStorage.getAllUpcomingEvents).toHaveBeenCalledWith('guild123', 50);
             expect(result).toBe(expectedEvents);
         });
     });

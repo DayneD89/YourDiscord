@@ -153,6 +153,25 @@ describe('EventStorage', () => {
         });
     });
 
+    describe('getAllUpcomingEvents', () => {
+        test('should get all upcoming events without time limit', async () => {
+            const expectedEvents = [{ event_id: '1', name: 'Event 1' }];
+            mockDocClient.send.mockResolvedValue({ Items: expectedEvents });
+
+            const result = await eventStorage.getAllUpcomingEvents('guild123');
+
+            expect(mockDocClient.send).toHaveBeenCalled();
+            expect(result).toBe(expectedEvents);
+        });
+
+        test('should return empty array on error', async () => {
+            mockDocClient.send.mockRejectedValue(new Error('Query error'));
+
+            const result = await eventStorage.getAllUpcomingEvents('guild123');
+            expect(result).toEqual([]);
+        });
+    });
+
     describe('updateReminderStatus', () => {
         test('should update reminder status successfully', async () => {
             mockDocClient.send.mockResolvedValue({});

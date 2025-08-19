@@ -27,6 +27,7 @@ describe('EventCommandHandler - Comprehensive Tests', () => {
       }),
       removeEvent: jest.fn().mockResolvedValue({ success: true }),
       getUpcomingEvents: jest.fn().mockResolvedValue([]),
+      getAllUpcomingEvents: jest.fn().mockResolvedValue([]),
       getUpcomingEventsByLocation: jest.fn().mockResolvedValue([]),
       clearAllEvents: jest.fn().mockResolvedValue(5)
     };
@@ -463,7 +464,7 @@ describe('EventCommandHandler - Comprehensive Tests', () => {
 
   describe('handleListEvents', () => {
     it('should handle no upcoming events', async () => {
-      mockEventManager.getUpcomingEvents.mockResolvedValue([]);
+      mockEventManager.getAllUpcomingEvents.mockResolvedValue([]);
 
       await eventCommandHandler.handleListEvents(mockMessage);
 
@@ -473,7 +474,7 @@ describe('EventCommandHandler - Comprehensive Tests', () => {
     });
 
     it('should handle null events', async () => {
-      mockEventManager.getUpcomingEvents.mockResolvedValue(null);
+      mockEventManager.getAllUpcomingEvents.mockResolvedValue(null);
 
       await eventCommandHandler.handleListEvents(mockMessage);
 
@@ -502,7 +503,7 @@ describe('EventCommandHandler - Comprehensive Tests', () => {
         }
       ];
 
-      mockEventManager.getUpcomingEvents.mockResolvedValue(mockEvents);
+      mockEventManager.getAllUpcomingEvents.mockResolvedValue(mockEvents);
 
       await eventCommandHandler.handleListEvents(mockMessage);
 
@@ -512,7 +513,7 @@ describe('EventCommandHandler - Comprehensive Tests', () => {
     });
 
     it('should handle listing errors', async () => {
-      mockEventManager.getUpcomingEvents.mockRejectedValue(new Error('Database error'));
+      mockEventManager.getAllUpcomingEvents.mockRejectedValue(new Error('Database error'));
 
       await eventCommandHandler.handleListEvents(mockMessage);
 
@@ -586,7 +587,7 @@ describe('EventCommandHandler - Comprehensive Tests', () => {
 
   describe('handleClearEvents', () => {
     it('should handle no events to clear', async () => {
-      mockEventManager.getUpcomingEvents.mockResolvedValue([]);
+      mockEventManager.getAllUpcomingEvents.mockResolvedValue([]);
 
       await eventCommandHandler.handleClearEvents(mockMessage);
 
@@ -596,7 +597,7 @@ describe('EventCommandHandler - Comprehensive Tests', () => {
     });
 
     it('should handle non-moderator access', async () => {
-      mockEventManager.getUpcomingEvents.mockResolvedValue([{ name: 'Event 1' }]);
+      mockEventManager.getAllUpcomingEvents.mockResolvedValue([{ name: 'Event 1' }]);
       mockUserValidator.canUseModerator.mockReturnValue(false);
 
       await eventCommandHandler.handleClearEvents(mockMessage);
@@ -607,7 +608,7 @@ describe('EventCommandHandler - Comprehensive Tests', () => {
     });
 
     it('should clear events successfully', async () => {
-      mockEventManager.getUpcomingEvents.mockResolvedValue([{ name: 'Event 1' }]);
+      mockEventManager.getAllUpcomingEvents.mockResolvedValue([{ name: 'Event 1' }]);
       mockEventManager.clearAllEvents.mockResolvedValue(3);
 
       await eventCommandHandler.handleClearEvents(mockMessage);
@@ -619,7 +620,7 @@ describe('EventCommandHandler - Comprehensive Tests', () => {
     });
 
     it('should handle no events cleared', async () => {
-      mockEventManager.getUpcomingEvents.mockResolvedValue([{ name: 'Event 1' }]);
+      mockEventManager.getAllUpcomingEvents.mockResolvedValue([{ name: 'Event 1' }]);
       mockEventManager.clearAllEvents.mockResolvedValue(0);
 
       await eventCommandHandler.handleClearEvents(mockMessage);
@@ -630,7 +631,7 @@ describe('EventCommandHandler - Comprehensive Tests', () => {
     });
 
     it('should handle clear errors', async () => {
-      mockEventManager.getUpcomingEvents.mockResolvedValue([{ name: 'Event 1' }]);
+      mockEventManager.getAllUpcomingEvents.mockResolvedValue([{ name: 'Event 1' }]);
       mockEventManager.clearAllEvents.mockRejectedValue(new Error('Clear error'));
 
       await eventCommandHandler.handleClearEvents(mockMessage);

@@ -419,7 +419,7 @@ class EventHandlers {
             // This method is called from bot channels where user permissions are pre-verified
 
             // Get all upcoming events from all regions (limit 50 to avoid performance issues)
-            const allEvents = await this.bot.getEventManager().storage.getUpcomingEvents(guild.id, 50);
+            const allEvents = await this.bot.getEventManager().getAllUpcomingEvents(guild.id, 50);
             
             console.log(`Found ${allEvents.length} total upcoming events across all regions`);
 
