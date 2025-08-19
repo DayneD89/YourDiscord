@@ -210,10 +210,20 @@ describe('EventHandlers - Message Processing', () => {
       });
 
       // Setup guild and member
+      const mockMember = { 
+        user: { id: 'user123' },
+        roles: {
+          cache: new Map([
+            ['member-role-id', { name: 'Member', id: 'member-role-id' }]
+          ])
+        }
+      };
+      
       mockMessage.guild = {
         id: 'guild123',
         members: {
-          cache: new Map([['user123', { user: { id: 'user123' } }]])
+          cache: new Map([['user123', mockMember]]),
+          fetch: jest.fn().mockResolvedValue(mockMember)
         }
       };
       mockMessage.author = { id: 'user123' };

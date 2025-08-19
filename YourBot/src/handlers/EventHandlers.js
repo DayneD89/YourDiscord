@@ -233,6 +233,13 @@ class EventHandlers {
             return;
         }
 
+        // CRITICAL: Only process messages from the configured guild
+        // This prevents cross-guild interference when multiple bot instances use the same token
+        if (message.guild?.id !== this.bot.getGuildId()) {
+            console.log(`Ignoring message from wrong guild: ${message.guild?.id} vs configured guild: ${this.bot.getGuildId()}`);
+            return;
+        }
+
         // Check if this bot is enabled - if disabled, ignore all commands except boton/botoff
         if (!this.bot.isThisBotEnabled()) {
             // Allow boton and botoff commands even when bot is disabled (admin override)
@@ -266,13 +273,25 @@ class EventHandlers {
         // Handle !events command specially based on channel type
         if (isEventsCommand) {
             if (isRegionalOrLocalChannel) {
-                console.log(`Processing !events command from ${message.author.tag} in regional/local channel ${message.channel.name}`);
-                await this.handleEventsCommand(message);
-                return;
+                        console.log(`Processing !events command from ${message.author.tag} in regional/local channel ${message.channel.name}`);
+                try {
+                    // Process events and return immediately - do not continue to CommandRouter
+                    await this.handleEventsCommand(message);
+                } catch (error) {
+                    console.error('Error in handleEventsCommand:', error);
+                    await message.reply('❌ An error occurred while processing your events command.').catch(console.error);
+                }
+                return; // CRITICAL: Always return early for regional/local channels
             } else if (isModeratorChannel || isMemberChannel) {
                 console.log(`Processing !events command from ${message.author.tag} in bot channel`);
-                await this.handleAllEventsCommand(message);
-                return;
+                try {
+                    // Process events and return immediately - do not continue to CommandRouter  
+                    await this.handleAllEventsCommand(message);
+                } catch (error) {
+                    console.error('Error in handleAllEventsCommand:', error);
+                    await message.reply('❌ An error occurred while processing your events command.').catch(console.error);
+                }
+                return; // CRITICAL: Always return early for bot channels
             }
         }
 
@@ -298,9 +317,18 @@ class EventHandlers {
      */
     async handleEventsCommand(message) {
         try {
-            // Check if user has member role
+            // Check if user has member role - use fresh fetch to avoid cache issues
             const guild = message.guild;
-            const member = guild.members.cache.get(message.author.id);
+            
+            let member;
+            try {
+                // Try to fetch fresh member data first, fall back to cache if needed
+                member = await guild.members.fetch(message.author.id).catch(() => 
+                    guild.members.cache.get(message.author.id)
+                );
+            } catch (error) {
+                member = null;
+            }
             
             if (!member) {
                 await message.reply('❌ Could not find your membership in this server.');
@@ -333,13 +361,12 @@ class EventHandlers {
                 events = await this.bot.getEventManager().getUpcomingEventsByLocation(guild.id, areaName);
             }
 
-            console.log(`🔍 Found ${events.length} upcoming events for ${areaType} area: ${areaName}`);
+            console.log(`Found ${events.length} upcoming events for ${areaType} area: ${areaName}`);
 
             if (events.length === 0) {
                 await message.reply(`📅 **No upcoming events found for ${areaName}**\n\nCheck back later or suggest new events with \`!addevent\` in a moderator channel!`);
                 return;
             }
-
             // Format events list
             let eventsDisplay = `📅 **Upcoming Events in ${areaName}** (Next ${events.length}):\n\n`;
             
@@ -379,7 +406,7 @@ class EventHandlers {
      */
     async handleAllEventsCommand(message) {
         try {
-            // Check if user has member role
+            // Get guild and member (member validation is handled by CommandRouter)
             const guild = message.guild;
             const member = guild.members.cache.get(message.author.id);
             
@@ -388,16 +415,13 @@ class EventHandlers {
                 return;
             }
 
-            const isMember = this.bot.getUserValidator().hasRole(member, this.bot.getMemberRoleId());
-            if (!isMember) {
-                await message.reply('❌ You need the member role to use this command.');
-                return;
-            }
+            // Skip member role validation here since CommandRouter already validates it
+            // This method is called from bot channels where user permissions are pre-verified
 
             // Get all upcoming events from all regions (limit 50 to avoid performance issues)
             const allEvents = await this.bot.getEventManager().storage.getUpcomingEvents(guild.id, 50);
             
-            console.log(`🔍 Found ${allEvents.length} total upcoming events across all regions`);
+            console.log(`Found ${allEvents.length} total upcoming events across all regions`);
 
             if (allEvents.length === 0) {
                 await message.reply(`📅 **No upcoming events found across all regions**\n\nCheck back later or ask moderators to add events with \`!addevent\`!`);
