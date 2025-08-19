@@ -23,11 +23,11 @@ describe('CI/CD Pipeline Validation', () => {
 
   describe('Module Loading', () => {
     it('should be able to load core bot modules', () => {
-      expect(() => require('../../src/UserValidator')).not.toThrow();
-      expect(() => require('../../src/ActionExecutor')).not.toThrow();
-      expect(() => require('../../src/EventHandlers')).not.toThrow();
-      expect(() => require('../../src/CommandHandler')).not.toThrow();
-      expect(() => require('../../src/ProposalParser')).not.toThrow();
+      expect(() => require('../../src/validators/UserValidator')).not.toThrow();
+      expect(() => require('../../src/processors/ActionExecutor')).not.toThrow();
+      expect(() => require('../../src/handlers/EventHandlers')).not.toThrow();
+      expect(() => require('../../src/handlers/CommandRouter')).not.toThrow();
+      expect(() => require('../../src/processors/ProposalParser')).not.toThrow();
     });
 
     it('should be able to load test helpers', () => {
@@ -41,12 +41,14 @@ describe('CI/CD Pipeline Validation', () => {
       expect(() => require('discord.js')).not.toThrow();
     });
 
-    it('should have AWS SDK available', () => {
-      expect(() => require('aws-sdk')).not.toThrow();
+    it('should have AWS SDK v3 available', () => {
+      expect(() => require('@aws-sdk/client-dynamodb')).not.toThrow();
+      expect(() => require('@aws-sdk/client-s3')).not.toThrow();
+      expect(() => require('@aws-sdk/lib-dynamodb')).not.toThrow();
     });
 
     it('should have Jest testing dependencies', () => {
-      expect(() => require('aws-sdk-mock')).not.toThrow();
+      expect(() => require('jest')).not.toThrow();
     });
   });
 

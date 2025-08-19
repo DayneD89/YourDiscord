@@ -1,0 +1,21 @@
+[Unit]
+Description=Discord Reaction Role Bot
+After=network.target discord-health.service
+Requires=discord-health.service
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/opt/discord-bot
+ExecStart=/bin/bash -c 'mkdir -p /var/log/discord-bot && /usr/bin/node bot-enhanced.js >> /var/log/discord-bot/bot.log 2>&1'
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=AWS_REGION=us-west-2
+SyslogIdentifier=discord-bot
+
+# Health check configuration
+ExecStartPost=/bin/bash -c "sleep 5; echo \"Service started, waiting for readiness...\""
+
+[Install]
+WantedBy=multi-user.target

@@ -1,7 +1,7 @@
 {
   "name": "yourbot",
   "version": "1.0.0",
-  "description": "Discord bot for managing reaction roles with dynamic S3-backed configuration",
+  "description": "Discord bot for managing reaction roles and governance with S3/DynamoDB hybrid storage",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js",
@@ -13,13 +13,15 @@
     "test:integration": "jest --testPathPattern=tests/integration"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.621.0",
+    "@aws-sdk/client-s3": "^3.621.0",
+    "@aws-sdk/lib-dynamodb": "^3.621.0",
     "discord.js": "^14.14.1",
-    "aws-sdk": "^2.1691.0"
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2",
     "jest": "^29.7.0",
-    "aws-sdk-mock": "^5.8.0"
+    "nodemon": "^3.0.2"
   },
   "engines": {
     "node": ">=16.0.0"
@@ -34,28 +36,35 @@
       "!src/**/*.test.js"
     ],
     "coverageDirectory": "coverage",
-    "coverageReporters": ["text", "lcov", "html", "text-summary"],
-    "setupFilesAfterEnv": ["<rootDir>/tests/setup.js"],
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html",
+      "text-summary"
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/tests/setup.js"
+    ],
     "coverageThreshold": {
-      "src/ActionExecutor.js": {
+      "src/processors/ActionExecutor.js": {
         "branches": 95,
         "functions": 100,
         "lines": 95,
         "statements": 95
       },
-      "src/UserValidator.js": {
+      "src/validators/UserValidator.js": {
         "branches": 95,
         "functions": 100,
         "lines": 95,
         "statements": 95
       },
-      "src/ProposalParser.js": {
+      "src/processors/ProposalParser.js": {
         "branches": 90,
         "functions": 95,
         "lines": 95,
         "statements": 95
       },
-      "src/EventHandlers.js": {
+      "src/handlers/EventHandlers.js": {
         "branches": 90,
         "functions": 95,
         "lines": 95,

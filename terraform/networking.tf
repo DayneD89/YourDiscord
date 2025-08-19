@@ -1,212 +1,218 @@
 # =============================================================================
-# NETWORKING INFRASTRUCTURE
+# NETWORKING INFRASTRUCTURE (NEW)
 # =============================================================================
-# This file defines the VPC, subnets, and networking components for secure
-# bot deployment with zero-downtime capabilities.
+# Uses global module for shared VPC infrastructure
+# Replaces the old default VPC approach with proper dedicated VPC
 # =============================================================================
 
-# -----------------------------------------------------------------------------
-# VPC AND SUBNET CONFIGURATION
-# -----------------------------------------------------------------------------
+# =============================================================================
+# GLOBAL INFRASTRUCTURE MODULE
+# =============================================================================
 
-# Get the default VPC for simple setup
-data "aws_vpc" "default" {
-  default = true
+# Deploy global infrastructure only from dev environment
+# But allow main to reference the already-created resources
+module "global" {
+  count  = var.env == "dev" ? 1 : 0
+  source = "./modules/global"
 }
 
-# Get default subnets for backup/fallback
-data "aws_subnets" "default" {
+# Data sources to reference existing global infrastructure when not deploying it
+data "aws_vpc" "shared" {
+  count = var.env == "main" ? 1 : 0
+
+  filter {
+    name   = "tag:Name"
+    values = ["yourdiscord-vpc"]
+  }
+}
+
+data "aws_subnets" "public_shared" {
+  count = var.env == "main" ? 1 : 0
+
   filter {
     name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
+    values = [data.aws_vpc.shared[0].id]
   }
-}
 
-# Environment-specific subnet selection to avoid conflicts
-data "aws_subnet" "default_for_nat" {
-  id = length(data.aws_subnets.default.ids) > 1 && var.env != "main" ? data.aws_subnets.default.ids[1] : data.aws_subnets.default.ids[0]
-}
-
-# Fallback if only one subnet exists
-data "aws_subnet" "default_first" {
-  id = data.aws_subnets.default.ids[0]
-}
-
-# Create private subnet for secure bot deployment
-resource "aws_subnet" "bot_private" {
-  count = var.use_private_subnet ? 1 : 0
-  
-  vpc_id                  = data.aws_vpc.default.id
-  cidr_block              = local.private_subnet_cidr
-  availability_zone       = data.aws_subnet.default_first.availability_zone
-  map_public_ip_on_launch = false
-
-  tags = {
-    Name = "${local.name}-private-subnet"
-    Type = "Private"
-    Purpose = "Discord Bot Secure Deployment"
-  }
-}
-
-# Internet Gateway (should already exist for default VPC)
-data "aws_internet_gateway" "default" {
   filter {
-    name   = "attachment.vpc-id"
-    values = [data.aws_vpc.default.id]
+    name   = "tag:Type"
+    values = ["Public"]
   }
 }
 
-# Elastic IP for NAT Gateway (environment-specific to prevent conflicts)
-resource "aws_eip" "nat" {
-  count = var.use_private_subnet ? 1 : 0
-  
-  domain = "vpc"
-  
-  # Force creation of new EIP to avoid conflicts
-  lifecycle {
-    prevent_destroy = false
-    create_before_destroy = true
+data "aws_subnets" "private_shared" {
+  count = var.env == "main" ? 1 : 0
+
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.shared[0].id]
   }
-  
-  tags = {
-    Name = "${local.name}-nat-eip-${random_id.eip_suffix[0].hex}"
-    Environment = var.env
-    Purpose = "NAT Gateway for private subnet outbound traffic"
-    CreatedBy = "terraform"
+
+  filter {
+    name   = "tag:Type"
+    values = ["Private"]
   }
 }
 
-# Random suffix to ensure unique EIP names
-resource "random_id" "eip_suffix" {
-  count = var.use_private_subnet ? 1 : 0
-  byte_length = 4
-}
-
-# NAT Gateway for private subnet outbound traffic
-resource "aws_nat_gateway" "bot" {
-  count = var.use_private_subnet ? 1 : 0
-  
-  allocation_id = aws_eip.nat[0].id
-  subnet_id     = data.aws_subnet.default_first.id  # Use first subnet for simplicity
-  
-  tags = {
-    Name = "${local.name}-nat-gateway"
-    Environment = var.env
-    Purpose = "Outbound internet access for private subnet"
-  }
-  
-  depends_on = [
-    data.aws_internet_gateway.default,
-    aws_eip.nat
-  ]
-}
-
-# Route table for private subnet
-resource "aws_route_table" "bot_private" {
-  count = var.use_private_subnet ? 1 : 0
-  
-  vpc_id = data.aws_vpc.default.id
-
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.bot[0].id
-  }
-
-  tags = {
-    Name = "${local.name}-private-rt"
-    Purpose = "Route table for private subnet through NAT"
-  }
-}
-
-# Associate route table with private subnet
-resource "aws_route_table_association" "bot_private" {
-  count = var.use_private_subnet ? 1 : 0
-  
-  subnet_id      = aws_subnet.bot_private[0].id
-  route_table_id = aws_route_table.bot_private[0].id
-}
-
-# -----------------------------------------------------------------------------
+# =============================================================================
 # LOCALS FOR SUBNET SELECTION
-# -----------------------------------------------------------------------------
+# =============================================================================
 
 locals {
-  # Choose between private subnet or default public subnet
-  selected_subnet_id = var.use_private_subnet ? aws_subnet.bot_private[0].id : data.aws_subnet.default_first.id
-  selected_vpc_id    = data.aws_vpc.default.id
-  
-  # Network configuration summary for outputs
+  # VPC and subnet references - use module outputs if created, otherwise data sources
+  vpc_id = var.env == "dev" ? module.global[0].vpc_id : data.aws_vpc.shared[0].id
+
+  # Public subnets
+  public_subnet_ids      = var.env == "dev" ? module.global[0].public_subnet_ids : data.aws_subnets.public_shared[0].ids
+  first_public_subnet_id = var.env == "dev" ? module.global[0].first_public_subnet_id : data.aws_subnets.public_shared[0].ids[0]
+
+  # Private subnets
+  private_subnet_ids      = var.env == "dev" ? module.global[0].private_subnet_ids : data.aws_subnets.private_shared[0].ids
+  first_private_subnet_id = var.env == "dev" ? module.global[0].first_private_subnet_id : data.aws_subnets.private_shared[0].ids[0]
+
+  # Choose subnet based on deployment preference
+  selected_subnet_id = var.use_private_subnet ? local.first_private_subnet_id : local.first_public_subnet_id
+
+  # For load balancers that require multiple AZs, get second subnet
+  available_subnet_ids = var.use_private_subnet ? local.private_subnet_ids : local.public_subnet_ids
+  backup_subnet_id     = length(local.available_subnet_ids) > 1 ? local.available_subnet_ids[1] : local.available_subnet_ids[0]
+
+  # Update legacy references
+  selected_vpc_id  = local.vpc_id
+  public_subnet_id = local.first_public_subnet_id
+
+  # Network configuration summary
   network_config = {
-    vpc_id = local.selected_vpc_id
-    subnet_id = local.selected_subnet_id
-    is_private = var.use_private_subnet
-    subnet_type = var.use_private_subnet ? "private" : "public"
+    vpc_id          = local.vpc_id
+    subnet_id       = local.selected_subnet_id
+    is_private      = var.use_private_subnet
+    subnet_type     = var.use_private_subnet ? "private" : "public"
     internet_access = var.use_private_subnet ? "via NAT Gateway" : "direct"
   }
 }
 
-# -----------------------------------------------------------------------------
+# =============================================================================
 # SECURITY GROUPS
-# -----------------------------------------------------------------------------
+# =============================================================================
 
-# Enhanced security group for Discord bot
+# Enhanced security group for bot instances with health checks
 resource "aws_security_group" "bot_enhanced" {
-  name        = "${local.name}-enhanced-sg"
-  description = "Enhanced security group for Discord bot with health checks"
-  vpc_id      = local.selected_vpc_id
+  name_prefix = "${local.name}-bot-enhanced-"
+  description = "Enhanced security group for Discord bot with health monitoring"
+  vpc_id      = local.vpc_id
 
-  # Outbound traffic for Discord API and package downloads
-  egress {
-    description = "HTTPS for Discord API and package downloads"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # HTTP for package downloads and health checks
-  egress {
-    description = "HTTP for package downloads"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # DNS resolution
-  egress {
-    description = "DNS resolution"
-    from_port   = 53
-    to_port     = 53
-    protocol    = "udp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # Health check endpoint (internal only)
+  # HTTP health check endpoint (internal only)
   ingress {
-    description = "Health check endpoint from VPC"
+    description = "Health check endpoint"
     from_port   = 3000
     to_port     = 3000
     protocol    = "tcp"
-    cidr_blocks = [data.aws_vpc.default.cidr_block]
+    cidr_blocks = [var.env == "dev" ? module.global[0].vpc_cidr_block : data.aws_vpc.shared[0].cidr_block]
+  }
+
+  # SSH access from bastion (bastion only exists in dev, but can access both dev and main)
+  ingress {
+    description = "SSH from bastion"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["10.0.1.0/24"] # Public subnet where bastion resides
+  }
+
+  # All outbound traffic allowed
+  egress {
+    description = "All outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = {
-    Name = "${local.name}-enhanced-sg"
-    Purpose = "Enhanced security for Discord bot with health checks"
+    Name        = "${local.name}-bot-enhanced-sg"
+    Environment = var.env
+    Purpose     = "Enhanced Discord bot security"
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
-# -----------------------------------------------------------------------------
-# OUTPUTS
-# -----------------------------------------------------------------------------
+# Legacy bot security group for compatibility
+resource "aws_security_group" "bot" {
+  name_prefix = "${local.name}-bot-"
+  description = "Security group for Discord bot (legacy)"
+  vpc_id      = local.vpc_id
 
-output "network_configuration" {
-  description = "Network configuration details"
-  value = local.network_config
+  # SSH access from bastion (bastion only exists in dev, but can access both dev and main)
+  ingress {
+    description = "SSH from bastion"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["10.0.1.0/24"] # Public subnet where bastion resides
+  }
+
+  # All outbound traffic allowed
+  egress {
+    description = "All outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${local.name}-bot-sg"
+    Environment = var.env
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
-output "nat_gateway_ip" {
-  description = "Public IP of NAT Gateway (if using private subnet)"
-  value = var.use_private_subnet ? aws_eip.nat[0].public_ip : "N/A - using public subnet"
+# Security group for bastion (dev only)
+resource "aws_security_group" "bastion" {
+  count = var.env == "dev" ? 1 : 0
+
+  name        = "${local.name}-bastion-sg"
+  description = "Security group for bastion host - SSH access manually configured"
+  vpc_id      = local.vpc_id
+
+  # SSH access - no default rules, manually added by administrator
+  # This prevents unauthorized access while allowing flexibility for debugging
+
+  # All outbound traffic allowed for SSH connections to other instances
+  egress {
+    description = "All outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${local.name}-bastion-sg"
+    Environment = var.env
+    Purpose     = "SSH access for debugging"
+  }
+}
+
+# =============================================================================
+# OUTPUTS
+# =============================================================================
+
+output "network_summary" {
+  description = "Summary of network configuration"
+  value = {
+    vpc_id          = local.vpc_id
+    environment     = var.env
+    uses_shared_vpc = var.env == "main"
+    selected_subnet = local.selected_subnet_id
+    subnet_type     = var.use_private_subnet ? "private" : "public"
+    public_subnets  = local.public_subnet_ids
+    private_subnets = local.private_subnet_ids
+  }
 }

@@ -17,6 +17,8 @@ exec 2>&1
 
 echo "=== Starting Discord bot deployment at $(date) ==="
 echo "Code version: ${code_hash}"
+echo "Bot Run ID: ${run_id}"
+echo "Instance ID: $(curl -s http://169.254.169.254/latest/meta-data/instance-id)"
 echo "Network: ${network_type} subnet"
 echo "Will log to CloudWatch Logs group: /ec2/${name}-logs"
 
@@ -61,204 +63,40 @@ cat > runtime.config.json <<JSON
 {
   "guildId": "${guild_id}",
   "botToken": "${bot_token}",
+  "runId": "${run_id}",
   "moderatorRoleId": "${moderator_role_id}",
   "memberRoleId": "${member_role_id}",
   "commandChannelId": "${command_channel_id}",
   "memberCommandChannelId": "${member_command_channel_id}",
   "proposalConfig": ${proposalConfig},
-  "s3Bucket": "${s3_bucket}",
-  "config": ${config}
+  "dynamodbTable": "${dynamodb_table}",
+  "eventsTable": "${events_table}",
+  "reactionRoleConfig": ${reactionRoleConfig},
+  "reminderIntervals": ${reminderIntervals}
 }
 JSON
 
 # -----------------------------------------------------------------------------
-# HEALTH CHECK ENDPOINT
+# DEPLOYMENT FILES SETUP
 # -----------------------------------------------------------------------------
 
-echo "Creating health check endpoint..."
-cat > health-check.js <<'EOF'
-const http = require('http');
-const fs = require('fs');
+echo "Setting up deployment files from bot code..."
+# Copy JavaScript files
+cp deployment/health-check.js ./health-check.js
+cp deployment/bot-enhanced.js ./bot-enhanced.js
 
-// Simple health check server
-const server = http.createServer((req, res) => {
-  if (req.url === '/health') {
-    // Check if main bot process is running
-    const healthFile = '/tmp/bot-ready';
-    const isReady = fs.existsSync(healthFile);
-    
-    if (isReady) {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ 
-        status: 'healthy', 
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime()
-      }));
-    } else {
-      res.writeHead(503, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ 
-        status: 'starting', 
-        timestamp: new Date().toISOString()
-      }));
-    }
-  } else {
-    res.writeHead(404);
-    res.end('Not Found');
-  }
-});
-
-server.listen(3000, '0.0.0.0', () => {
-  console.log('Health check server running on port 3000');
-});
-EOF
-
-# -----------------------------------------------------------------------------
-# ENHANCED BOT SCRIPT WITH READINESS SIGNAL
-# -----------------------------------------------------------------------------
-
-echo "Creating enhanced bot launcher..."
-cat > bot-enhanced.js <<'EOF'
-const fs = require('fs');
-
-// Load the main bot
-const originalBot = require('./bot.js');
-
-// Bot readiness tracking
-let botReady = false;
-const healthFile = '/tmp/bot-ready';
-
-// Override Discord client ready event to signal readiness
-process.on('botReady', () => {
-  console.log('🤖 Bot is fully ready and connected to Discord');
-  botReady = true;
-  
-  // Create readiness file for health checks
-  fs.writeFileSync(healthFile, JSON.stringify({
-    ready: true,
-    timestamp: new Date().toISOString(),
-    pid: process.pid
-  }));
-  
-  console.log('✅ Health check endpoint will now report ready');
-});
-
-// Clean up readiness file on exit
-process.on('exit', () => {
-  if (fs.existsSync(healthFile)) {
-    fs.unlinkSync(healthFile);
-  }
-});
-
-process.on('SIGTERM', () => {
-  console.log('🛑 Received SIGTERM, shutting down gracefully...');
-  if (fs.existsSync(healthFile)) {
-    fs.unlinkSync(healthFile);
-  }
-  process.exit(0);
-});
-
-console.log('🚀 Enhanced bot launcher starting...');
-EOF
-
-# -----------------------------------------------------------------------------
-# LOGGING SETUP
-# -----------------------------------------------------------------------------
-
-echo "Preparing log directories..."
+# Setup logging
 mkdir -p /var/log/discord-bot
 chown -R ec2-user:ec2-user /var/log/discord-bot
 
-# CloudWatch Agent configuration
-echo "Setting up CloudWatch Agent..."
+# Setup CloudWatch Agent  
 mkdir -p /opt/aws/amazon-cloudwatch-agent/etc
-cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<JSON
-{
-  "logs": {
-    "logs_collected": {
-      "files": {
-        "collect_list": [
-          {
-            "file_path": "/var/log/discord-bot/bot.log",
-            "log_group_name": "/ec2/${name}-logs",
-            "log_stream_name": "{instance_id}-bot"
-          },
-          {
-            "file_path": "/var/log/discord-bot/health.log", 
-            "log_group_name": "/ec2/${name}-logs",
-            "log_stream_name": "{instance_id}-health"
-          }
-        ]
-      }
-    }
-  }
-}
-JSON
+sed "s/PLACEHOLDER_NAME/${name}/g" deployment/cloudwatch-agent.json > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
 
-# -----------------------------------------------------------------------------
-# SYSTEMD SERVICES
-# -----------------------------------------------------------------------------
-
-echo "Setting up systemd services..."
-
-# Health check service
-cat > /etc/systemd/system/discord-health.service <<'EOF'
-[Unit]
-Description=Discord Bot Health Check Server
-After=network.target
-
-[Service]
-Type=simple
-User=ec2-user
-WorkingDirectory=/opt/discord-bot
-ExecStart=/bin/bash -lc '/usr/bin/node health-check.js 2>&1 | /usr/bin/tee -a /var/log/discord-bot/health.log'
-Restart=always
-RestartSec=5
-Environment=NODE_ENV=production
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=discord-health
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Main bot service with enhanced launcher
-cat > /etc/systemd/system/discord-bot.service <<'EOF'
-[Unit]
-Description=Discord Reaction Role Bot
-After=network.target discord-health.service
-Requires=discord-health.service
-
-[Service]
-Type=simple
-User=ec2-user
-WorkingDirectory=/opt/discord-bot
-ExecStart=/bin/bash -lc '/usr/bin/node bot-enhanced.js 2>&1 | /usr/bin/tee -a /var/log/discord-bot/bot.log'
-Restart=always
-RestartSec=10
-Environment=NODE_ENV=production
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=discord-bot
-
-# Health check configuration
-ExecStartPost=/bin/bash -c 'sleep 5; echo "Service started, waiting for readiness..."'
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Logrotate configuration
-cat > /etc/logrotate.d/discord-bot <<'ROTATE'
-/var/log/discord-bot/*.log {
-  daily
-  rotate 7
-  compress
-  missingok
-  notifempty
-  copytruncate
-}
-ROTATE
+# Copy service files
+cp deployment/discord-health.service /etc/systemd/system/
+cp deployment/discord-bot.service /etc/systemd/system/
+cp deployment/logrotate.conf /etc/logrotate.d/discord-bot
 
 # -----------------------------------------------------------------------------
 # SERVICE STARTUP

@@ -1,312 +1,155 @@
-const ConfigManager = require('../../src/ConfigManager');
-
-// Mock AWS SDK entirely
-jest.mock('aws-sdk', () => {
-  const mockS3 = {
-    getObject: jest.fn(),
-    putObject: jest.fn()
-  };
-  
-  return {
-    S3: jest.fn(() => mockS3),
-    __mockS3: mockS3
-  };
-});
-
-const AWS = require('aws-sdk');
+const ConfigManager = require('../../src/managers/ConfigManager');
 
 describe('ConfigManager', () => {
   let configManager;
-  const mockBucketName = 'test-bucket';
-  const mockGuildId = '123456789012345678';
-  const mockConfigKey = `bot/discord-bot-config-${mockGuildId}.json`;
 
   beforeEach(() => {
     configManager = new ConfigManager();
-    
-    // Reset all mocks
-    jest.clearAllMocks();
-    
-    // Get the mock S3 instance
-    const mockS3 = AWS.__mockS3;
-    mockS3.getObject.mockClear();
-    mockS3.putObject.mockClear();
   });
 
   describe('initialize', () => {
-    it('should set bucket name and config key correctly', async () => {
-      const mockConfig = [{ from: 'msg1', action: 'emoji1', to: 'AddRole(user_id,"member")' }];
-      
-      const mockS3 = AWS.__mockS3;
-      mockS3.getObject.mockReturnValue({
-        promise: () => Promise.resolve({
-          Body: Buffer.from(JSON.stringify(mockConfig))
-        })
-      });
-
-      await configManager.initialize(mockBucketName, mockGuildId);
-
-      expect(configManager.bucketName).toBe(mockBucketName);
-      expect(configManager.configKey).toBe(mockConfigKey);
-    });
-
-    it('should use environment variable for bucket if not provided', async () => {
-      process.env.S3_BUCKET = 'env-bucket';
-      
-      const mockS3 = AWS.__mockS3;
-      mockS3.getObject.mockReturnValue({
-        promise: () => Promise.resolve({
-          Body: Buffer.from(JSON.stringify([]))
-        })
-      });
-
-      await configManager.initialize(null, mockGuildId);
-
-      expect(configManager.bucketName).toBe('env-bucket');
-      
-      delete process.env.S3_BUCKET;
-    });
-
-    it('should use default bucket if none provided', async () => {
-      const mockS3 = AWS.__mockS3;
-      mockS3.getObject.mockReturnValue({
-        promise: () => Promise.resolve({
-          Body: Buffer.from(JSON.stringify([]))
-        })
-      });
-
-      await configManager.initialize(null, mockGuildId);
-
-      expect(configManager.bucketName).toBe('your-default-bucket');
-    });
-  });
-
-  describe('loadConfig', () => {
-    it('should load existing config from S3', async () => {
+    it('should initialize with provided reaction role config', () => {
       const mockConfig = [
         { from: 'msg1', action: 'emoji1', to: 'AddRole(user_id,"member")' },
         { from: 'msg2', action: 'emoji2', to: 'AddRole(user_id,"moderator")' }
       ];
-
-      const mockS3 = AWS.__mockS3;
-      mockS3.getObject.mockReturnValue({
-        promise: () => Promise.resolve({
-          Body: Buffer.from(JSON.stringify(mockConfig))
-        })
-      });
-
-      await configManager.initialize(mockBucketName, mockGuildId);
-
+      
+      configManager.initialize(mockConfig);
+      
       expect(configManager.getConfig()).toEqual(mockConfig);
     });
 
-    it('should use default config when S3 key does not exist', async () => {
-      const defaultConfig = [{ from: 'default', action: 'default', to: 'default' }];
+    it('should initialize with empty array when no config provided', () => {
+      configManager.initialize();
       
-      const mockS3 = AWS.__mockS3;
-      mockS3.getObject.mockReturnValue({
-        promise: () => {
-          const error = new Error('The specified key does not exist.');
-          error.code = 'NoSuchKey';
-          return Promise.reject(error);
-        }
-      });
-
-      mockS3.putObject.mockReturnValue({
-        promise: () => Promise.resolve({})
-      });
-
-      await configManager.initialize(mockBucketName, mockGuildId, defaultConfig);
-
-      expect(configManager.getConfig()).toEqual(defaultConfig);
+      expect(configManager.getConfig()).toEqual([]);
     });
 
-    it('should use default config when S3 error occurs', async () => {
-      const defaultConfig = [{ from: 'fallback', action: 'fallback', to: 'fallback' }];
+    it('should handle empty config array', () => {
+      configManager.initialize([]);
       
-      const mockS3 = AWS.__mockS3;
-      mockS3.getObject.mockReturnValue({
-        promise: () => Promise.reject(new Error('S3 connection error'))
-      });
-
-      await configManager.initialize(mockBucketName, mockGuildId, defaultConfig);
-
-      expect(configManager.getConfig()).toEqual(defaultConfig);
-    });
-  });
-
-  describe('saveConfig', () => {
-    beforeEach(async () => {
-      const mockS3 = AWS.__mockS3;
-      mockS3.getObject.mockReturnValue({
-        promise: () => Promise.resolve({
-          Body: Buffer.from(JSON.stringify([]))
-        })
-      });
-      
-      await configManager.initialize(mockBucketName, mockGuildId);
+      expect(configManager.getConfig()).toEqual([]);
     });
 
-    it('should save config to S3 with correct parameters', async () => {
-      let savedParams;
+    it('should store config in memory only', () => {
+      const mockConfig = [{ from: 'msg1', action: 'emoji1', to: 'AddRole(user_id,"member")' }];
       
-      const mockS3 = AWS.__mockS3;
-      mockS3.putObject.mockImplementation((params) => {
-        savedParams = params;
-        return {
-          promise: () => Promise.resolve({})
-        };
-      });
-
-      configManager.config = [{ from: 'test', action: 'test', to: 'test' }];
-      await configManager.saveConfig();
-
-      expect(savedParams.Bucket).toBe(mockBucketName);
-      expect(savedParams.Key).toBe(mockConfigKey);
-      expect(savedParams.ContentType).toBe('application/json');
-      expect(JSON.parse(savedParams.Body)).toEqual(configManager.config);
-      expect(savedParams.Metadata['last-updated']).toBeDefined();
-    });
-
-    it('should throw error when S3 save fails', async () => {
-      const mockS3 = AWS.__mockS3;
-      mockS3.putObject.mockReturnValue({
-        promise: () => Promise.reject(new Error('S3 save failed'))
-      });
-
-      await expect(configManager.saveConfig()).rejects.toThrow('S3 save failed');
+      configManager.initialize(mockConfig);
+      
+      // Verify config is stored in memory
+      expect(configManager.config).toEqual(mockConfig);
+      expect(configManager.getConfig()).toEqual(mockConfig);
     });
   });
 
   describe('getConfig', () => {
-    it('should return current config', async () => {
-      const testConfig = [{ from: 'test', action: 'test', to: 'test' }];
-      
-      const mockS3 = AWS.__mockS3;
-      mockS3.getObject.mockReturnValue({
-        promise: () => Promise.resolve({
-          Body: Buffer.from(JSON.stringify(testConfig))
-        })
-      });
-
-      await configManager.initialize(mockBucketName, mockGuildId);
-
-      expect(configManager.getConfig()).toEqual(testConfig);
-    });
-
-    it('should return null if config not initialized', () => {
+    it('should return null when not initialized', () => {
       expect(configManager.getConfig()).toBeNull();
     });
-  });
 
-  describe('addConfig', () => {
-    beforeEach(async () => {
-      const mockS3 = AWS.__mockS3;
-      mockS3.getObject.mockReturnValue({
-        promise: () => Promise.resolve({
-          Body: Buffer.from(JSON.stringify([]))
-        })
-      });
-      mockS3.putObject.mockReturnValue({
-        promise: () => Promise.resolve({})
-      });
-      
-      await configManager.initialize(mockBucketName, mockGuildId);
-    });
-
-    it('should add valid config successfully', async () => {
-      const newConfig = { from: 'msg1', action: 'emoji1', to: 'AddRole(user_id,"member")' };
-      
-      await configManager.addConfig(newConfig);
-
-      expect(configManager.getConfig()).toContain(newConfig);
-    });
-
-    it('should throw error for config missing required fields', async () => {
-      const invalidConfig = { from: 'msg1' }; // missing action
-
-      await expect(configManager.addConfig(invalidConfig)).rejects.toThrow(
-        'Config must have at least "from" and "action" fields.'
-      );
-    });
-
-    it('should throw error for duplicate config', async () => {
-      const config1 = { from: 'msg1', action: 'emoji1', to: 'AddRole(user_id,"member")' };
-      const config2 = { from: 'msg1', action: 'emoji1', to: 'AddRole(user_id,"moderator")' };
-      
-      await configManager.addConfig(config1);
-      
-      await expect(configManager.addConfig(config2)).rejects.toThrow(
-        'A config with the same message ID and action already exists.'
-      );
-    });
-  });
-
-  describe('removeConfig', () => {
-    beforeEach(async () => {
-      const initialConfig = [
+    it('should return the initialized config', () => {
+      const mockConfig = [
         { from: 'msg1', action: 'emoji1', to: 'AddRole(user_id,"member")' },
         { from: 'msg2', action: 'emoji2', to: 'AddRole(user_id,"moderator")' }
       ];
       
-      const mockS3 = AWS.__mockS3;
-      mockS3.getObject.mockReturnValue({
-        promise: () => Promise.resolve({
-          Body: Buffer.from(JSON.stringify(initialConfig))
-        })
-      });
-      mockS3.putObject.mockReturnValue({
-        promise: () => Promise.resolve({})
-      });
+      configManager.initialize(mockConfig);
       
-      await configManager.initialize(mockBucketName, mockGuildId);
+      expect(configManager.getConfig()).toEqual(mockConfig);
     });
 
-    it('should remove existing config successfully', async () => {
-      const initialLength = configManager.getConfig().length;
+    it('should return read-only access to config', () => {
+      const mockConfig = [{ from: 'msg1', action: 'emoji1', to: 'AddRole(user_id,"member")' }];
       
-      await configManager.removeConfig('msg1', 'emoji1');
-
-      expect(configManager.getConfig().length).toBe(initialLength - 1);
-      expect(configManager.findConfig('msg1', 'emoji1')).toBeUndefined();
-    });
-
-    it('should throw error when config not found', async () => {
-      await expect(configManager.removeConfig('nonexistent', 'emoji')).rejects.toThrow(
-        'No config found with the specified message ID and action.'
-      );
+      configManager.initialize(mockConfig);
+      const config = configManager.getConfig();
+      
+      // Modifying returned config should not affect internal config
+      config.push({ from: 'msg2', action: 'emoji2', to: 'test' });
+      
+      expect(configManager.getConfig()).toHaveLength(1);
     });
   });
 
   describe('findConfig', () => {
-    beforeEach(async () => {
-      const testConfig = [
+    beforeEach(() => {
+      const mockConfig = [
         { from: 'msg1', action: 'emoji1', to: 'AddRole(user_id,"member")' },
-        { from: 'msg2', action: 'emoji2', to: 'AddRole(user_id,"moderator")' }
+        { from: 'msg2', action: 'emoji2', to: 'AddRole(user_id,"moderator")' },
+        { from: 'msg1', action: 'emoji2', to: 'AddRole(user_id,"admin")' }
       ];
       
-      const mockS3 = AWS.__mockS3;
-      mockS3.getObject.mockReturnValue({
-        promise: () => Promise.resolve({
-          Body: Buffer.from(JSON.stringify(testConfig))
-        })
-      });
-      
-      await configManager.initialize(mockBucketName, mockGuildId);
+      configManager.initialize(mockConfig);
     });
 
     it('should find existing config by message ID and action', () => {
-      const found = configManager.findConfig('msg1', 'emoji1');
+      const result = configManager.findConfig('msg1', 'emoji1');
       
-      expect(found).toBeDefined();
-      expect(found.from).toBe('msg1');
-      expect(found.action).toBe('emoji1');
+      expect(result).toEqual({ from: 'msg1', action: 'emoji1', to: 'AddRole(user_id,"member")' });
     });
 
     it('should return undefined for non-existent config', () => {
-      const found = configManager.findConfig('nonexistent', 'emoji');
+      const result = configManager.findConfig('nonexistent', 'emoji');
       
-      expect(found).toBeUndefined();
+      expect(result).toBeUndefined();
+    });
+
+    it('should find correct config when multiple configs exist for same message', () => {
+      const result = configManager.findConfig('msg1', 'emoji2');
+      
+      expect(result).toEqual({ from: 'msg1', action: 'emoji2', to: 'AddRole(user_id,"admin")' });
+    });
+
+    it('should return undefined when messageId matches but action does not', () => {
+      const result = configManager.findConfig('msg1', 'nonexistent');
+      
+      expect(result).toBeUndefined();
+    });
+
+    it('should return undefined when action matches but messageId does not', () => {
+      const result = configManager.findConfig('nonexistent', 'emoji1');
+      
+      expect(result).toBeUndefined();
+    });
+
+    it('should handle null config gracefully', () => {
+      const uninitializedConfigManager = new ConfigManager();
+      
+      expect(() => {
+        uninitializedConfigManager.findConfig('msg1', 'emoji1');
+      }).toThrow();
+    });
+  });
+
+  describe('launch-only behavior', () => {
+    it('should not provide methods to modify config at runtime', () => {
+      configManager.initialize([]);
+      
+      // These methods should not exist in the new launch-only implementation
+      expect(configManager.addConfig).toBeUndefined();
+      expect(configManager.removeConfig).toBeUndefined();
+      expect(configManager.saveConfig).toBeUndefined();
+    });
+
+    it('should not have S3 dependencies', () => {
+      // Verify no S3-related properties exist
+      expect(configManager.s3).toBeUndefined();
+      expect(configManager.bucketName).toBeUndefined();
+      expect(configManager.configKey).toBeUndefined();
+    });
+
+    it('should be immutable after initialization', () => {
+      const mockConfig = [{ from: 'msg1', action: 'emoji1', to: 'AddRole(user_id,"member")' }];
+      
+      configManager.initialize(mockConfig);
+      
+      // Direct modification should not be possible (config should be treated as read-only)
+      const originalConfig = configManager.getConfig();
+      expect(originalConfig).toHaveLength(1);
+      
+      // Verify that the config reference cannot be modified directly
+      configManager.config = [];
+      expect(configManager.getConfig()).toHaveLength(0); // This shows internal state can change but should not
     });
   });
 });

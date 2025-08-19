@@ -67,13 +67,13 @@ locals {
   ])
 
   emoji_pool = [
-    "1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟",
-    "🅰️","🅱️","✅","❌","⭕","❎","✳️","✴️","❇️",
-    "🔺","🔻","🔸","🔹","🔷","🔶",
-    "🔴","🟠","🟡","🟢","🔵","🟣","🟤","⚪","⚫",
-    "⬜","⬛","🟥","🟧","🟨","🟩","🟦","🟪","🟫",
-    "◀️","▶️","⏹️","⏺️","⏯️","⏸️","⏭️","⏮️",
-    "⏫","⏬","⏪","⏩"
+    "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟",
+    "🅰️", "🅱️", "✅", "❌", "⭕", "❎", "✳️", "✴️", "❇️",
+    "🔺", "🔻", "🔸", "🔹", "🔷", "🔶",
+    "🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "🟤", "⚪", "⚫",
+    "⬜", "⬛", "🟥", "🟧", "🟨", "🟩", "🟦", "🟪", "🟫",
+    "◀️", "▶️", "⏹️", "⏺️", "⏯️", "⏸️", "⏭️", "⏮️",
+    "⏫", "⏬", "⏪", "⏩"
   ]
 
   region_picker_header = [
@@ -107,8 +107,8 @@ locals {
         if j < length(local.emoji_pool)
       ],
       length(r.towns) > length(local.emoji_pool)
-        ? ["", "_(Truncated — add more emojis to the pool or split across messages.)_"]
-        : []
+      ? ["", "_(Truncated — add more emojis to the pool or split across messages.)_"]
+      : []
     ))
   }
 }
@@ -120,11 +120,21 @@ locals {
 locals {
   # Environment-based naming
   name = "yourdiscord-${var.env}"
-  
+
   # Network configuration - references networking.tf
-  vpc_id    = local.selected_vpc_id
-  subnet_id = local.selected_subnet_id
-  
+  # vpc_id and subnet_id are now defined in networking.tf
+
   # Environment-specific private subnet CIDR blocks to avoid conflicts
   private_subnet_cidr = var.env == "main" ? "172.31.240.0/24" : "172.31.245.0/24"
+  
+  # Environment-specific event reminder intervals
+  # Production: 7 days and 24 hours before events
+  # Development: 5 minutes and 2 minutes before event (for fast testing)
+  reminder_intervals = var.env == "main" ? {
+    weekReminder = 7 * 24 * 60 * 60 * 1000    # 7 days in milliseconds
+    dayReminder = 24 * 60 * 60 * 1000          # 24 hours in milliseconds
+  } : {
+    weekReminder = 5 * 60 * 1000               # 5 minutes before event
+    dayReminder = 2 * 60 * 1000                # 2 minutes before event
+  }
 }

@@ -1,8 +1,6 @@
 name: 🧪 Test & Coverage
 
 on:
-  push:
-    branches: [ main, features ]
   pull_request:
     branches: [ main ]
     types: [ opened, synchronize, reopened ]
@@ -56,16 +54,6 @@ jobs:
       - name: 📊 Generate coverage report
         working-directory: YourBot
         run: npm run test:coverage -- --testPathIgnorePatterns="ConfigManager.test.js"
-
-      - name: 📈 Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          directory: YourBot/coverage
-          flags: unittests
-          name: yourbot-coverage
-          fail_ci_if_error: false
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: 📋 Coverage Summary
         working-directory: YourBot

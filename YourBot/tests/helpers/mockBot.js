@@ -1,5 +1,8 @@
 // Mock bot instance for testing
 // Provides a consistent bot mock across all tests
+// Enhanced with new factory utilities for better consistency
+
+const { createMockRuntimeConfig, createProposalConfig } = require('./mockFactories');
 
 class MockBot {
   constructor(overrides = {}) {
@@ -42,7 +45,7 @@ class MockBot {
       getActiveVotes: jest.fn(() => []),
     };
     
-    this.commandHandler = overrides.commandHandler || {
+    this.commandRouter = overrides.commandRouter || {
       handleCommand: jest.fn(),
     };
   }
@@ -55,6 +58,39 @@ class MockBot {
   getConfigManager() { return this.configManager; }
   getUserValidator() { return this.userValidator; }
   getProposalManager() { return this.proposalManager; }
+  getReminderIntervals() { 
+    return {
+      weekReminder: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
+      dayReminder: 24 * 60 * 60 * 1000 // 24 hours in ms
+    };
+  }
+  getEventsTable() { return 'discord-events-test'; }
+  
+  // Bot state management methods
+  isThisBotEnabled() { return true; }
+  isBotEnabled(botId) { return true; }
+  enableBot(botId) { }
+  disableBot(botId) { }
+  getBotId() { return 'test-bot-123'; }
+  
+  // New helper methods for enhanced testing
+  setProposalConfig(type, config) {
+    if (!this.proposalManager.proposalConfig) {
+      this.proposalManager.proposalConfig = {};
+    }
+    this.proposalManager.proposalConfig[type] = createProposalConfig(type, config);
+  }
+  
+  getRuntimeConfig(overrides = {}) {
+    return createMockRuntimeConfig({
+      guildId: this.guildId,
+      moderatorRoleId: this.moderatorRoleId,
+      memberRoleId: this.memberRoleId,
+      commandChannelId: this.commandChannelId,
+      memberCommandChannelId: this.memberCommandChannelId,
+      ...overrides
+    });
+  }
 }
 
 module.exports = MockBot;
