@@ -164,15 +164,25 @@ class EventNotificationManager {
      */
     formatEventMessage(event) {
         const eventDate = new Date(event.event_date);
-        const formattedDate = eventDate.toLocaleDateString('en-GB', {
+        
+        // Use consistent date/time formatting to avoid cross-platform issues
+        const dateOptions = {
             weekday: 'long',
             year: 'numeric',
             month: 'long',
             day: 'numeric',
+            timeZone: 'Europe/London'
+        };
+        
+        const timeOptions = {
             hour: '2-digit',
             minute: '2-digit',
             timeZone: 'Europe/London'
-        });
+        };
+        
+        const datePart = eventDate.toLocaleDateString('en-GB', dateOptions);
+        const timePart = eventDate.toLocaleTimeString('en-GB', timeOptions);
+        const formattedDate = `${datePart} at ${timePart}`;
 
         return `🎉 **New Event Added!**\n\n` +
             `**${event.name}**\n` +
@@ -190,15 +200,25 @@ class EventNotificationManager {
      */
     formatReminderMessage(event, timeUntil, isAfterCreation) {
         const eventDate = new Date(event.event_date);
-        const formattedDate = eventDate.toLocaleDateString('en-GB', {
+        
+        // Use consistent date/time formatting to avoid cross-platform issues
+        const dateOptions = {
             weekday: 'long',
             year: 'numeric',
             month: 'long',
             day: 'numeric',
+            timeZone: 'Europe/London'
+        };
+        
+        const timeOptions = {
             hour: '2-digit',
             minute: '2-digit',
             timeZone: 'Europe/London'
-        });
+        };
+        
+        const datePart = eventDate.toLocaleDateString('en-GB', dateOptions);
+        const timePart = eventDate.toLocaleTimeString('en-GB', timeOptions);
+        const formattedDate = `${datePart} at ${timePart}`;
 
         let timeText = timeUntil;
         if (isAfterCreation) {
@@ -296,15 +316,25 @@ class EventNotificationManager {
      */
     formatCancellationMessage(event) {
         const eventDate = new Date(event.event_date);
-        const formattedDate = eventDate.toLocaleDateString('en-GB', {
+        
+        // Use consistent date/time formatting to avoid cross-platform issues
+        const dateOptions = {
             weekday: 'long',
             year: 'numeric',
             month: 'long',
             day: 'numeric',
+            timeZone: 'Europe/London'
+        };
+        
+        const timeOptions = {
             hour: '2-digit',
             minute: '2-digit',
             timeZone: 'Europe/London'
-        });
+        };
+        
+        const datePart = eventDate.toLocaleDateString('en-GB', dateOptions);
+        const timePart = eventDate.toLocaleTimeString('en-GB', timeOptions);
+        const formattedDate = `${datePart} at ${timePart}`;
 
         return `**${event.name}**\n` +
             `📅 **Was scheduled for:** ${formattedDate}\n` +

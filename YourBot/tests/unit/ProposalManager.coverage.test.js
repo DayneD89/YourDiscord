@@ -29,6 +29,7 @@ describe('ProposalManager - Coverage Tests', () => {
     mockStorage = {
       initialize: jest.fn().mockResolvedValue(),
       getActiveVotes: jest.fn().mockResolvedValue([]),
+      getEndedVotes: jest.fn().mockResolvedValue([]),
       getProposal: jest.fn().mockResolvedValue(null),
       addProposal: jest.fn().mockResolvedValue(),
       updateProposal: jest.fn().mockResolvedValue()
@@ -391,4 +392,5 @@ describe('ProposalManager - Coverage Tests', () => {
       consoleErrorSpy.mockRestore();
     });
   });
+
 });

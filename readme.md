@@ -55,9 +55,9 @@ A powerful Discord bot that enables democratic community governance through auto
 - **GitHub Actions CI/CD**: Automated testing, coverage, and deployment pipeline
 
 ### 📊 Testing & Coverage
-- **Comprehensive Test Suite**: 817+ unit and integration tests with Jest framework
+- **Comprehensive Test Suite**: 843+ unit and integration tests with Jest framework
 - **Code Coverage Enforcement**: Strict coverage thresholds (95%+ statements)
-- **Current Coverage**: 95.03% statements, 88.29% branches, 93.15% functions, 95.51% lines
+- **Current Coverage**: 94.91% statements, 88.43% branches, 92.3% functions, 95.52% lines
 - **High-Quality Standards**: 100% coverage for core components (ConfigManager, EventManager, processors)
 - **Analytics Dashboard**: Interactive coverage reports with code metrics and charts
 - **Automated Coverage Reports**: GitHub Pages deployment with visual analytics
@@ -77,7 +77,7 @@ yourpartyserver/
 │   │   ├── storage/            # Data persistence layer (DynamoDB, S3)
 │   │   ├── validators/         # Permission and data validation
 │   │   └── DiscordReactionBot.js # Main bot coordinator
-│   ├── tests/                  # Comprehensive test suite (817+ tests)
+│   ├── tests/                  # Comprehensive test suite (843+ tests)
 │   │   ├── unit/               # Unit tests organized by module
 │   │   │   └── core/           # Tests for core components
 │   │   ├── integration/        # Integration tests
@@ -117,23 +117,127 @@ View live analytics and coverage reports: **[Coverage Dashboard](https://dayned8
 - 🎯 Visual indicators for untested files
 - 📱 Mobile-responsive design with modern UI
 
-## 🚀 Quick Start
+## 🚀 Getting Started
 
-### For Users
+### 🎯 Quick Start for New Contributors
+
+Want to make your first contribution? Here's a complete walkthrough from cloning to creating a pull request!
+
+#### 🔧 Prerequisites
+- Git installed on your computer
+- Node.js 18+ installed
+- GitHub account
+- Text editor (VS Code recommended)
+
+#### 📦 Step 1: Clone and Setup
+```bash
+# 1. Fork the repository on GitHub (click Fork button)
+# 2. Clone your fork locally
+git clone https://github.com/YOUR_USERNAME/YourDiscord.git
+cd YourDiscord
+
+# 3. Set up security measures (prevents accidentally committing tokens)
+./scripts/setup-security.sh
+
+# 4. Add upstream remote to stay in sync
+git remote add upstream https://github.com/DayneD89/YourDiscord.git
+
+# 5. Install dependencies
+cd YourBot
+npm install
+```
+
+#### ✏️ Step 2: Make Your First Change
+Let's fix a simple spelling mistake in a message:
+
+```bash
+# 1. Create a feature branch
+git checkout -b fix/improve-help-message
+
+# 2. Find and edit a message file
+# Example: Edit YourBot/src/handlers/CommandRouter.js
+# Look for a help message or user-facing text
+
+# 3. Make your change (example)
+# Before: "Here's the available commands"
+# After:  "Here are the available commands"
+```
+
+#### 🧪 Step 3: Test Your Changes
+```bash
+# 1. Run the test suite to ensure nothing broke
+npm test
+
+# 2. Check code coverage (should maintain >94%)
+npm run test:coverage
+
+# 3. If tests pass, you're ready to commit!
+```
+
+#### 💾 Step 4: Commit Your Changes
+```bash
+# 1. Stage your changes
+git add .
+
+# 2. Commit with a descriptive message
+git commit -m "Fix grammar in help command message
+
+- Change 'Here's the' to 'Here are the' for grammatical correctness
+- Improve readability of user-facing text"
+
+# 3. Push to your fork
+git push origin fix/improve-help-message
+```
+
+#### 🔄 Step 5: Create Pull Request
+1. **Go to GitHub**: Visit your fork on GitHub
+2. **Create PR**: Click "Compare & pull request" button
+3. **Fill out template**: 
+   - **Title**: `Fix grammar in help command message`
+   - **Description**: Explain what you changed and why
+   - **Testing**: "Ran full test suite, all 843+ tests pass"
+
+#### 🚀 Step 6: Request Development Testing
+In your PR description or comments, add:
+
+```markdown
+@DayneD89 Could you please deploy this to the dev environment for testing?
+
+This change updates user-facing text and I'd like to verify it displays correctly in Discord before merging.
+```
+
+**Important**: You can ask for dev deployment at any time after creating your PR. This allows testing the actual functionality in a real Discord environment before the code is merged to main.
+
+#### 🎉 Step 7: Follow Through
+- **Respond to feedback**: Address any review comments
+- **Keep updated**: If requested, update your PR with changes
+- **Celebrate**: Once approved and merged, your contribution is live!
+
+### 📋 More Examples of Beginner-Friendly Changes
+- **Messages**: Fix spelling/grammar in bot responses
+- **Documentation**: Improve README files or add examples  
+- **Error Messages**: Make error messages more helpful
+- **Comments**: Add explanatory comments to complex code
+- **Tests**: Add test cases for edge cases
+- **Configuration**: Improve configuration validation messages
+
+### 🎯 Quick Start for Different User Types
+
+#### For Discord Server Users
 1. Join a server with YourPartyServer deployed
 2. Get the member role by reacting to the welcome message
 3. Use `!help` in the member command channel to see available commands
 4. Participate in proposals by reacting with ✅ for support
 5. Vote on proposals that advance to the voting phase
 
-### For Contributors
+#### For Experienced Contributors
 1. **Security Setup**: Run `./scripts/setup-security.sh` to install pre-commit hooks
 2. **Environment Setup**: Copy `.env.example` to `.env` and add your Discord token
 3. **Never Commit Tokens**: Our security measures prevent accidental token commits
-4. **Test Coverage**: Aim for >60% global coverage and >90% for core modules
+4. **Test Coverage**: Maintain >94% statement coverage and >92% function coverage
 5. **Terraform Operations**: Use `./scripts/terraform-wrapper.sh apply` for reliability
 
-### For Server Administrators
+#### For Server Administrators
 1. **Deploy Your Own**: Follow the [Self-Hosting Guide](docs/self-hosting.md)
 2. **Configure Channels**: Set up debate, voting, and resolution channels
 3. **Manage Configurations**: Use moderator commands to configure reaction roles
@@ -236,8 +340,8 @@ Want to run your own instance? Our comprehensive guide covers everything from AW
 [![GitHub issues](https://img.shields.io/github/issues/DayneD89/YourDiscord)](https://github.com/DayneD89/YourDiscord/issues)
 [![GitHub last commit](https://img.shields.io/github/last-commit/DayneD89/YourDiscord)](https://github.com/DayneD89/YourDiscord/commits)
 
-- **Code Coverage**: Enforced quality gates with 95%+ statements and 93%+ functions coverage
-- **Test Suite**: 817+ comprehensive tests across unit and integration scenarios  
+- **Code Coverage**: Enforced quality gates with 94.91% statements and 92.3% functions coverage
+- **Test Suite**: 843+ comprehensive tests across unit and integration scenarios  
 - **Infrastructure**: Fully automated deployment with Terraform and AWS (ALB health checks)
 - **CI/CD Pipeline**: Continuous integration with GitHub Actions and coverage enforcement
 - **Security**: Automated secret detection and pre-commit security validation

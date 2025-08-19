@@ -2,10 +2,31 @@
 
 This directory contains the Node.js Discord bot application that powers the YourPartyServer governance system. The bot provides automated role management, democratic proposal systems, and community governance features.
 
-## 🚀 Quick Start - Running Manually
+## 🚀 Getting Started
+
+### For Contributors - Quick Setup
+
+If you're contributing to the project, follow these steps:
+
+```bash
+# 1. Clone the main project
+git clone https://github.com/DayneD89/YourDiscord.git
+cd YourDiscord/YourBot
+
+# 2. Install dependencies  
+npm install
+
+# 3. Run tests to verify setup
+npm test
+
+# 4. Start development with auto-restart
+npm run dev
+```
+
+### For Manual Bot Deployment
 
 ### Prerequisites
-- Node.js 16 or higher
+- Node.js 18 or higher (updated requirement)
 - Discord bot token
 - AWS credentials (for S3 storage and DynamoDB)
 - Discord server with appropriate permissions
@@ -82,7 +103,7 @@ For quick development testing, create a minimal configuration:
 ### Development Scripts
 ```bash
 npm run dev             # Run with nodemon for auto-restart
-npm test                # Run unit tests (817+ tests)
+npm test                # Run unit tests (843+ tests)
 npm run test:coverage   # Run tests with coverage report
 npm run test:watch      # Run tests in watch mode for development
 ```
@@ -143,7 +164,7 @@ YourBot/
 3. **Dependency Injection**: ComponentOrchestrator manages dependencies and initialization order
 4. **Event-Driven**: Responds to Discord events through specialized handlers
 5. **Hybrid Storage**: S3 for configuration, DynamoDB for dynamic data with AWS SDK v3
-6. **Comprehensive Testing**: 95%+ coverage with unified test utilities and patterns
+6. **Comprehensive Testing**: 94.91%+ coverage with unified test utilities and patterns
 7. **Graceful Error Handling**: Continues operating despite individual component failures
 8. **Democratic Governance**: Multi-stage proposal system with automated voting
 9. **Security-First**: Comprehensive validation and permission checking
