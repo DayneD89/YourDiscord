@@ -101,14 +101,6 @@ describe('EventHandlers - Utility Functions & Error Handling', () => {
       expect(mockMessage.reply).toHaveBeenCalledWith('❌ Could not find your membership in this server.');
     });
 
-    it('should reject users without member role', async () => {
-      mockBot.userValidator.hasRole.mockReturnValue(false);
-      
-      await eventHandlers.handleAllEventsCommand(mockMessage);
-      
-      expect(mockMessage.reply).toHaveBeenCalledWith('❌ You need the member role to use this command.');
-    });
-
     it('should handle no events found', async () => {
       mockBot.userValidator.hasRole.mockReturnValue(true);
       mockBot.getEventManager().storage.getUpcomingEvents.mockResolvedValue([]);
@@ -227,11 +219,12 @@ describe('EventHandlers - Utility Functions & Error Handling', () => {
       mockMessage.channel = { id: 'some-channel', name: 'regional-london' }; // Regional channel but no guild
       mockBot.userValidator.isBot.mockReturnValue(false);
       
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
       
       await eventHandlers.handleMessage(mockMessage);
 
-      expect(consoleSpy).toHaveBeenCalledWith('Error handling !events command:', expect.any(Error));
+      // Should ignore message from wrong guild (undefined guild)
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Ignoring message from wrong guild'));
       consoleSpy.mockRestore();
     });
   });

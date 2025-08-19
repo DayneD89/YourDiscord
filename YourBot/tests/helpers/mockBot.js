@@ -72,6 +72,7 @@ class MockBot {
   enableBot(botId) { }
   disableBot(botId) { }
   getBotId() { return 'test-bot-123'; }
+  getRunId() { return 'test-run-456'; }
   
   // New helper methods for enhanced testing
   setProposalConfig(type, config) {
