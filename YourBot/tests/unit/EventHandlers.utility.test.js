@@ -29,6 +29,15 @@ describe('EventHandlers - Utility Functions & Error Handling', () => {
   });
 
   describe('getTimeUntilEvent', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2025-01-01T12:00:00Z')); // Fixed time
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
     it('should calculate time correctly for future events', () => {
       const futureDate = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 hours
       const result = eventHandlers.getTimeUntilEvent(futureDate);
