@@ -17,15 +17,17 @@ output "internet_gateway_id" {
   value       = aws_internet_gateway.main.id
 }
 
-output "nat_gateway_id" {
-  description = "ID of the NAT Gateway"
-  value       = aws_nat_gateway.main.id
-}
-
-output "nat_gateway_eip" {
-  description = "Elastic IP of the NAT Gateway"
-  value       = aws_eip.nat.public_ip
-}
+# NAT Gateway outputs - DISABLED FOR COST SAVINGS
+# Uncomment when NAT Gateway is re-enabled in main.tf
+# output "nat_gateway_id" {
+#   description = "ID of the NAT Gateway"
+#   value       = aws_nat_gateway.main.id
+# }
+# 
+# output "nat_gateway_eip" {
+#   description = "Elastic IP of the NAT Gateway"
+#   value       = aws_eip.nat.public_ip
+# }
 
 # Public subnets
 output "public_subnet_ids" {
@@ -70,16 +72,17 @@ output "private_route_table_id" {
   value       = aws_route_table.private.id
 }
 
-# VPC Endpoints
-output "s3_vpc_endpoint_id" {
-  description = "ID of the S3 VPC endpoint"
-  value       = aws_vpc_endpoint.s3.id
-}
-
-output "dynamodb_vpc_endpoint_id" {
-  description = "ID of the DynamoDB VPC endpoint"
-  value       = aws_vpc_endpoint.dynamodb.id
-}
+# VPC Endpoints - DISABLED FOR COST SAVINGS
+# Uncomment when VPC endpoints are re-enabled in main.tf
+# output "s3_vpc_endpoint_id" {
+#   description = "ID of the S3 VPC endpoint"
+#   value       = aws_vpc_endpoint.s3.id
+# }
+# 
+# output "dynamodb_vpc_endpoint_id" {
+#   description = "ID of the DynamoDB VPC endpoint"
+#   value       = aws_vpc_endpoint.dynamodb.id
+# }
 
 # Convenience outputs for selecting subnets
 output "first_public_subnet_id" {

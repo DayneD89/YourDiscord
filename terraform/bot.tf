@@ -283,7 +283,7 @@ resource "aws_launch_template" "bot" {
   description = "Launch template for Discord bot with health checking"
 
   image_id      = data.aws_ami.al2023_arm.id
-  instance_type = var.env == "main" ? "t4g.micro" : "t4g.nano"
+  instance_type = "t4g.nano"  # Downgraded from t4g.micro for cost savings (~$3.40/month)
   key_name      = "yourdiscord"
 
   vpc_security_group_ids = [aws_security_group.bot_enhanced.id]
@@ -297,7 +297,7 @@ resource "aws_launch_template" "bot" {
   block_device_mappings {
     device_name = "/dev/xvda"
     ebs {
-      volume_size           = 30
+      volume_size           = 8  # Reduced from 30GB for additional cost savings (~$1.76/month per env)
       volume_type           = "gp3"
       encrypted             = true
       delete_on_termination = true
@@ -319,8 +319,12 @@ resource "aws_launch_template" "bot" {
   }
 }
 
-# Application Load Balancer for health checks
+# Application Load Balancer for health checks - DISABLED FOR COST SAVINGS
+# To re-enable: change count condition to var.enable_alb_health_checks ? 1 : 0
+# Cost savings: ~$18.25/month
 resource "aws_lb" "bot_health" {
+  count = 0  # Disabled for cost savings
+
   name               = "${local.name}-health-lb"
   internal           = true # Internal only, just for health checks
   load_balancer_type = "application"
@@ -335,8 +339,11 @@ resource "aws_lb" "bot_health" {
   }
 }
 
-# Target group for health checks
+# Target group for health checks - DISABLED FOR COST SAVINGS
+# To re-enable: change count condition to var.enable_alb_health_checks ? 1 : 0
 resource "aws_lb_target_group" "bot_health" {
+  count = 0  # Disabled for cost savings
+
   name     = "${local.name}-health-tg"
   port     = 3000
   protocol = "HTTP"
@@ -363,25 +370,29 @@ resource "aws_lb_target_group" "bot_health" {
   }
 }
 
-# Load balancer listener
+# Load balancer listener - DISABLED FOR COST SAVINGS
+# To re-enable: change count condition to var.enable_alb_health_checks ? 1 : 0
 resource "aws_lb_listener" "bot_health" {
-  load_balancer_arn = aws_lb.bot_health.arn
+  count = 0  # Disabled for cost savings
+
+  load_balancer_arn = aws_lb.bot_health[0].arn
   port              = "3000"
   protocol          = "HTTP"
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.bot_health.arn
+    target_group_arn = aws_lb_target_group.bot_health[0].arn
   }
 }
 
-# Auto Scaling Group for zero-downtime deployments
+# Auto Scaling Group for deployments - UPDATED FOR COST SAVINGS
+# Now uses EC2 health checks instead of ELB (no ALB dependency)
 resource "aws_autoscaling_group" "bot" {
   name                      = "${local.name}-asg"
   vpc_zone_identifier       = [local.selected_subnet_id]
-  health_check_type         = "ELB" # Use ELB health checks for proper bot readiness detection
-  health_check_grace_period = 120   # 2 minutes for bot to start and report ready
-  target_group_arns         = [aws_lb_target_group.bot_health.arn]
+  health_check_type         = "EC2" # Use EC2 health checks instead of ELB (cost savings)
+  health_check_grace_period = 180   # 3 minutes for bot to start (increased due to no health endpoint)
+  target_group_arns         = var.enable_alb_health_checks ? [aws_lb_target_group.bot_health[0].arn] : []
 
   min_size         = 1
   max_size         = 2
@@ -439,7 +450,7 @@ resource "aws_autoscaling_group" "bot" {
 
 resource "aws_cloudwatch_log_group" "bot" {
   name              = "/ec2/${local.name}-logs"
-  retention_in_days = 7
+  retention_in_days = 3  # Reduced from 7 days for cost savings (~$0.50/month)
 }
 
 # Output for monitoring deployment status

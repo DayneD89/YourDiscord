@@ -7,9 +7,10 @@
 
 # Security group is now defined in networking.tf
 
-# Bastion host instance
+# Bastion host instance - DISABLED FOR COST SAVINGS
+# To re-enable: change count condition to var.enable_bastion ? 1 : 0
 resource "aws_instance" "bastion" {
-  count = var.env == "dev" ? 1 : 0
+  count = 0  # Disabled for cost savings
 
   ami                    = data.aws_ami.al2023_arm.id
   instance_type          = "t4g.nano" # Minimal instance for SSH access
