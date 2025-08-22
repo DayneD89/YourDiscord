@@ -9,16 +9,18 @@
 # GLOBAL INFRASTRUCTURE MODULE
 # =============================================================================
 
-# Deploy global infrastructure only from dev environment
-# But allow main to reference the already-created resources
+# Deploy global infrastructure only from dev environment - TEMPORARY FOR TRANSITION
+# This allows dev to safely transition to cost-optimized setup before disabling
+# Stage 1: Enable for dev to apply cost optimizations and destroy expensive resources
 module "global" {
-  count  = var.env == "dev" ? 1 : 0
+  count  = var.env == "dev" ? 1 : 0  # Temporarily enabled for dev transition
   source = "./modules/global"
 }
 
-# Data sources to reference existing global infrastructure when not deploying it
+# Data sources to reference existing global infrastructure
+# Both dev and main use shared infrastructure now for cost savings
 data "aws_vpc" "shared" {
-  count = var.env == "main" ? 1 : 0
+  count = 1  # Always use shared VPC now that global module is disabled
 
   filter {
     name   = "tag:Name"
@@ -27,7 +29,7 @@ data "aws_vpc" "shared" {
 }
 
 data "aws_subnets" "public_shared" {
-  count = var.env == "main" ? 1 : 0
+  count = 1  # Always use shared subnets now that global module is disabled
 
   filter {
     name   = "vpc-id"
@@ -41,7 +43,7 @@ data "aws_subnets" "public_shared" {
 }
 
 data "aws_subnets" "private_shared" {
-  count = var.env == "main" ? 1 : 0
+  count = 1  # Always use shared subnets now that global module is disabled
 
   filter {
     name   = "vpc-id"
@@ -59,16 +61,16 @@ data "aws_subnets" "private_shared" {
 # =============================================================================
 
 locals {
-  # VPC and subnet references - use module outputs if created, otherwise data sources
-  vpc_id = var.env == "dev" ? module.global[0].vpc_id : data.aws_vpc.shared[0].id
+  # VPC and subnet references - use module for dev (during transition), data sources for prod
+  vpc_id = var.env == "dev" && length(module.global) > 0 ? module.global[0].vpc_id : data.aws_vpc.shared[0].id
 
   # Public subnets
-  public_subnet_ids      = var.env == "dev" ? module.global[0].public_subnet_ids : data.aws_subnets.public_shared[0].ids
-  first_public_subnet_id = var.env == "dev" ? module.global[0].first_public_subnet_id : data.aws_subnets.public_shared[0].ids[0]
+  public_subnet_ids      = var.env == "dev" && length(module.global) > 0 ? module.global[0].public_subnet_ids : data.aws_subnets.public_shared[0].ids
+  first_public_subnet_id = var.env == "dev" && length(module.global) > 0 ? module.global[0].first_public_subnet_id : data.aws_subnets.public_shared[0].ids[0]
 
   # Private subnets
-  private_subnet_ids      = var.env == "dev" ? module.global[0].private_subnet_ids : data.aws_subnets.private_shared[0].ids
-  first_private_subnet_id = var.env == "dev" ? module.global[0].first_private_subnet_id : data.aws_subnets.private_shared[0].ids[0]
+  private_subnet_ids      = var.env == "dev" && length(module.global) > 0 ? module.global[0].private_subnet_ids : data.aws_subnets.private_shared[0].ids
+  first_private_subnet_id = var.env == "dev" && length(module.global) > 0 ? module.global[0].first_private_subnet_id : data.aws_subnets.private_shared[0].ids[0]
 
   # Choose subnet based on deployment preference
   selected_subnet_id = var.use_private_subnet ? local.first_private_subnet_id : local.first_public_subnet_id
@@ -107,7 +109,7 @@ resource "aws_security_group" "bot_enhanced" {
     from_port   = 3000
     to_port     = 3000
     protocol    = "tcp"
-    cidr_blocks = [var.env == "dev" ? module.global[0].vpc_cidr_block : data.aws_vpc.shared[0].cidr_block]
+    cidr_blocks = [var.env == "dev" && length(module.global) > 0 ? module.global[0].vpc_cidr_block : data.aws_vpc.shared[0].cidr_block]
   }
 
   # SSH access from bastion (bastion only exists in dev, but can access both dev and main)
@@ -173,9 +175,10 @@ resource "aws_security_group" "bot" {
   }
 }
 
-# Security group for bastion (dev only)
+# Security group for bastion - DISABLED FOR COST SAVINGS  
+# To re-enable: change count condition to var.enable_bastion ? 1 : 0
 resource "aws_security_group" "bastion" {
-  count = var.env == "dev" ? 1 : 0
+  count = 0  # Disabled for cost savings
 
   name        = "${local.name}-bastion-sg"
   description = "Security group for bastion host - SSH access manually configured"

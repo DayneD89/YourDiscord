@@ -63,9 +63,9 @@ variable "use_private_subnet" {
   # Boolean type for feature flag
   type = bool
 
-  # Default to true for security best practices
-  # Private subnet provides enhanced security with NAT Gateway
-  default = true
+  # Default to false for cost savings
+  # Private subnet provides enhanced security with NAT Gateway but costs more
+  default = false
 
   # Description explaining the security benefits
   description = <<-EOT
@@ -79,6 +79,33 @@ variable "use_private_subnet" {
         
         Set to false for simpler setup using public subnet.
     EOT
+}
+
+# -----------------------------------------------------------------------------
+# OPTIONAL COMPONENTS FOR COST CONTROL
+# -----------------------------------------------------------------------------
+# These variables allow disabling expensive components while keeping
+# the option to quickly re-enable them when needed
+
+# Whether to enable bastion host for SSH debugging
+variable "enable_bastion" {
+  type        = bool
+  default     = false
+  description = "Enable bastion host for SSH access to private instances. Costs ~$8/month."
+}
+
+# Whether to enable dev environment deployment
+variable "enable_dev_environment" {
+  type        = bool
+  default     = false
+  description = "Enable dev environment deployment with separate VPC. Costs additional resources."
+}
+
+# Whether to enable Application Load Balancer for zero-downtime deployments
+variable "enable_alb_health_checks" {
+  type        = bool
+  default     = false
+  description = "Enable ALB with health checks for zero-downtime deployments. Costs ~$18/month but eliminates deployment downtime."
 }
 
 # -----------------------------------------------------------------------------
